@@ -16,24 +16,25 @@ from typing import Any, NamedTuple
 import pandas as pd
 import streamlit as st
 
-PERSONAS = (
-    "Discovery",
-    "Translational Research",
-    "Clinical Biomarkers",
-    "Clinical Development",
-    "Medical Affairs",
-    "Oncology",
-    "Immunology",
-    "Safety/Risk",
-    "Bioanalysis",
-    "Computational Biology",
-)
+from narratives import PERSONAS, get_narrative_set
+
+
+OLD_TO_NEW_PERSONA = {
+    "Translational Research": "Translational / Clinical Development",
+    "Clinical Development": "Translational / Clinical Development",
+    "Clinical Biomarkers": "Biomarkers / Bioanalysis",
+    "Bioanalysis": "Biomarkers / Bioanalysis",
+    "Safety/Risk": "Safety / Quality",
+    "Immunology": "Discovery",
+    "Computational Biology": "Discovery",
+}
 
 PERSONA_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
-        "Safety/Risk",
+        "Safety / Quality",
         (
             "safety",
+            "quality",
             "pharmacovigilance",
             "risk management",
             "patient safety",
@@ -55,7 +56,7 @@ PERSONA_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
-        "Clinical Biomarkers",
+        "Biomarkers / Bioanalysis",
         (
             "clinical biomarker",
             "biomarker",
@@ -63,22 +64,6 @@ PERSONA_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "companion diagnostic",
             "diagnostic",
             "pharmacodynamic biomarker",
-        ),
-    ),
-    (
-        "Clinical Development",
-        (
-            "clinical development",
-            "clinical trial",
-            "clinical operations",
-            "clinical study",
-            "clinical research",
-            "development lead",
-        ),
-    ),
-    (
-        "Bioanalysis",
-        (
             "bioanalysis",
             "bioanalytical",
             "dmpk",
@@ -90,35 +75,24 @@ PERSONA_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
-        "Computational Biology",
+        "Translational / Clinical Development",
         (
-            "computational biology",
-            "bioinformatics",
-            "data science",
-            "systems biology",
-            "multiomics",
-            "multi-omics",
-            "machine learning",
-            "ai/ml",
-        ),
-    ),
-    (
-        "Oncology",
-        ("oncology", "cancer", "tumor", "tumour", "immuno-oncology", "io research"),
-    ),
-    (
-        "Immunology",
-        ("immunology", "inflammation", "autoimmune", "immune", "immunotherapy"),
-    ),
-    (
-        "Translational Research",
-        (
+            "clinical development",
+            "clinical trial",
+            "clinical operations",
+            "clinical study",
+            "clinical research",
+            "development lead",
             "translational",
             "translational medicine",
             "translational science",
             "bench to bedside",
             "human biology",
         ),
+    ),
+    (
+        "Oncology",
+        ("oncology", "cancer", "tumor", "tumour", "immuno-oncology", "io research"),
     ),
     (
         "Discovery",
@@ -130,181 +104,24 @@ PERSONA_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "research scientist",
             "principal scientist",
             "biology",
+            "immunology",
+            "inflammation",
+            "autoimmune",
+            "immune",
+            "computational biology",
+            "bioinformatics",
+            "data science",
+            "systems biology",
+            "multiomics",
+            "multi-omics",
         ),
     ),
 )
 
-EMAIL_VARIANTS = {
-    "Discovery": {
-        "subjects": (
-            "Metabolomics in discovery programs at {company}",
-            "Biochemical context for discovery work at {company}",
-            "A metabolomics lens on early biology at {company}",
-            "Connecting phenotype and pathway biology at {company}",
-            "Metabolomics support for discovery decisions at {company}",
-        ),
-        "narratives": (
-            "Discovery groups often need a practical way to connect phenotype, target biology, and pathway-level biochemistry before programs move too far downstream.",
-            "Metabolomics can help early research teams see which biochemical pathways shift when a target, model, or compound changes the underlying biology.",
-            "A common challenge in discovery is deciding whether an observed phenotype reflects a durable mechanism or a narrower model-specific effect.",
-            "Many discovery programs use metabolomics to add functional context when genetics, transcriptomics, or cellular assays do not fully explain the biology.",
-            "Early research decisions are often stronger when teams can measure broad biochemical activity rather than rely on a single marker or endpoint.",
-        ),
-    },
-    "Translational Research": {
-        "subjects": (
-            "Metabolomics for translational research at {company}",
-            "Connecting model and human biology at {company}",
-            "Translational metabolomics support for {company}",
-            "Biochemical readouts across translational studies at {company}",
-            "Metabolomics across preclinical and clinical biology at {company}",
-        ),
-        "narratives": (
-            "Many translational teams are using metabolomics to compare biology across model systems and human samples.",
-            "One area where metabolomics has become useful is connecting preclinical findings with what is observed clinically.",
-            "Many groups are looking for additional ways to understand whether biological signals observed in models persist in patients.",
-            "Metabolomics is increasingly being used to provide a functional readout that spans discovery and clinical research.",
-            "A recurring challenge in translational work is deciding which biological signals are most likely to matter clinically.",
-        ),
-    },
-    "Clinical Biomarkers": {
-        "subjects": (
-            "Metabolomics for biomarker work at {company}",
-            "Biochemical context for biomarkers at {company}",
-            "Clinical biomarker support for {company}",
-            "Metabolomics in patient stratification at {company}",
-            "Functional biomarker readouts at {company}",
-        ),
-        "narratives": (
-            "Biomarker teams often need functional evidence that connects patient biology with response, disease activity, or mechanism.",
-            "Metabolomics can help identify biochemical markers that add context to pharmacodynamic signals and patient segmentation strategies.",
-            "A recurring biomarker challenge is finding signals that are measurable, biologically interpretable, and useful across clinical samples.",
-            "Many clinical biomarker groups use metabolomics to understand which pathway changes may explain response or disease heterogeneity.",
-            "Metabolomics can provide a broad biochemical readout when single-analyte markers do not capture enough of the patient biology.",
-        ),
-    },
-    "Clinical Development": {
-        "subjects": (
-            "Metabolomics for clinical development at {company}",
-            "Biochemical readouts in clinical studies at {company}",
-            "Clinical metabolomics support for {company}",
-            "Adding biology to development decisions at {company}",
-            "Metabolomics across clinical samples at {company}",
-        ),
-        "narratives": (
-            "Clinical development teams often need more biological context around response, dose, patient heterogeneity, and endpoint interpretation.",
-            "Metabolomics can help read drug effect and disease biology directly from clinical samples without adding a large operational burden.",
-            "One challenge in development is understanding why patients respond differently when standard endpoints only show part of the picture.",
-            "Many clinical groups use metabolomics to add functional pathway evidence around treatment effect, progression, or responder analyses.",
-            "Clinical samples can carry useful biochemical information that helps clarify mechanism, response patterns, and decisions between study stages.",
-        ),
-    },
-    "Medical Affairs": {
-        "subjects": (
-            "Metabolomics for medical affairs at {company}",
-            "Biochemical evidence for scientific exchange at {company}",
-            "Disease biology context for {company}",
-            "Metabolomics in medical discussions at {company}",
-            "Scientific evidence generation support for {company}",
-        ),
-        "narratives": (
-            "Medical affairs teams often need clear biological evidence to support scientific exchange with clinicians, researchers, and external experts.",
-            "Metabolomics can help explain disease biology and treatment response through measurable biochemical differences rather than broad claims.",
-            "One useful role for metabolomics is building evidence that makes mechanism and patient biology easier to discuss in a scientific setting.",
-            "Many medical teams look for ways to connect emerging data with disease pathways that clinicians and investigators can interpret.",
-            "A common need in medical affairs is credible, biologically grounded evidence that supports education, data generation, and external engagement.",
-        ),
-    },
-    "Oncology": {
-        "subjects": (
-            "Metabolomics for oncology work at {company}",
-            "Tumor metabolism and response biology at {company}",
-            "Oncology metabolomics support for {company}",
-            "Biochemical context in oncology studies at {company}",
-            "Metabolomics across oncology samples at {company}",
-        ),
-        "narratives": (
-            "Oncology teams often need to understand tumor metabolism, host response, resistance biology, and treatment effect across complex samples.",
-            "Metabolomics can help clarify which biochemical pathways shift with therapy, progression, or differences between responder groups.",
-            "A recurring challenge in oncology is connecting molecular findings with functional biology that may explain response or resistance.",
-            "Many oncology groups use metabolomics to add pathway-level evidence around mechanism, stratification, and clinical sample interpretation.",
-            "Cancer studies often generate many signals, and metabolomics can help show which changes reflect active biochemical biology.",
-        ),
-    },
-    "Immunology": {
-        "subjects": (
-            "Metabolomics for immunology work at {company}",
-            "Biochemical context for immune biology at {company}",
-            "Immunology metabolomics support for {company}",
-            "Metabolomics in inflammation studies at {company}",
-            "Functional readouts for immune-mediated disease at {company}",
-        ),
-        "narratives": (
-            "Immunology teams often need to connect immune activity with biochemical pathways tied to inflammation, disease activity, and response.",
-            "Metabolomics can add functional context when cytokine, cellular, or transcriptomic readouts do not fully explain immune biology.",
-            "A common challenge in immune-mediated disease is understanding which pathway changes reflect disease state versus treatment effect.",
-            "Many immunology groups use metabolomics to study inflammation, autoimmune biology, and response patterns in clinical or model systems.",
-            "Metabolic pathways can provide useful evidence about immune activation and resolution when teams need a broader biological readout.",
-        ),
-    },
-    "Safety/Risk": {
-        "subjects": (
-            "Metabolomics for safety and risk work at {company}",
-            "Biochemical context for safety signals at {company}",
-            "Metabolomics in risk interpretation at {company}",
-            "Safety biology support for {company}",
-            "Understanding toxicity signals at {company}",
-        ),
-        "narratives": (
-            "Safety teams often need to understand whether biochemical changes point to adaptive biology, off-target effects, or signals that require follow-up.",
-            "Metabolomics can help interpret toxicity and organ-specific effects by showing pathway-level changes behind observed safety findings.",
-            "A recurring challenge in risk assessment is deciding which early biological signals are meaningful enough to influence program decisions.",
-            "Many safety groups use metabolomics to add mechanistic context around adverse findings, exposure effects, and emerging risk signals.",
-            "Broad biochemical profiling can help distinguish nonspecific changes from patterns that suggest a clearer safety or risk mechanism.",
-        ),
-    },
-    "Bioanalysis": {
-        "subjects": (
-            "Metabolomics alongside bioanalysis at {company}",
-            "Biochemical context for PK/PD work at {company}",
-            "Bioanalysis and metabolomics support for {company}",
-            "Connecting exposure and response at {company}",
-            "Metabolomics around targeted assays at {company}",
-        ),
-        "narratives": (
-            "Bioanalysis teams often need broader biochemical context when targeted assays or PK/PD data do not fully explain response biology.",
-            "Metabolomics can complement established analyte panels by showing pathway-level changes linked to exposure, response, or disease state.",
-            "A common challenge in bioanalysis is connecting precise measurements with the wider biology occurring in the same samples.",
-            "Many groups use metabolomics alongside targeted work to understand whether exposure is translating into expected biochemical effects.",
-            "Broad profiling can help place specific assay results into a functional context that is easier for research and clinical teams to interpret.",
-        ),
-    },
-    "Computational Biology": {
-        "subjects": (
-            "Metabolomics for computational biology at {company}",
-            "A phenotype layer for multi-omics at {company}",
-            "Biochemical data for computational models at {company}",
-            "Connecting omics signals to metabolism at {company}",
-            "Metabolomics in systems biology work at {company}",
-        ),
-        "narratives": (
-            "Computational biology teams often need a measured phenotype layer that connects upstream omics patterns with functional biochemical activity.",
-            "Metabolomics can strengthen multi-omics interpretation by showing which pathways are active in a disease, model, or treatment context.",
-            "A recurring challenge in computational work is translating genomic or transcriptomic signals into biology that can be measured directly.",
-            "Many systems biology groups use metabolomics to anchor models in biochemical readouts from the same samples or study context.",
-            "Broad metabolite data can help connect algorithms, pathway models, and biological hypotheses to observable changes in physiology.",
-        ),
-    },
-}
 
-CTA_VARIANTS = (
-    "If this is relevant, I would welcome a brief 20-minute conversation.",
-    "If useful, I would be glad to compare notes in a short 20-minute call.",
-    "If this aligns with current work, I would welcome a brief conversation.",
-    "If helpful, I would be glad to discuss where this may fit in a 20-minute call.",
-    "If there is interest, I would welcome a short conversation to share more detail.",
-)
-
+def map_persona(persona: str) -> str:
+    """Map legacy persona names into the six active personas."""
+    return OLD_TO_NEW_PERSONA.get(persona, persona)
 
 
 class ContactOutreach(NamedTuple):
@@ -315,6 +132,7 @@ class ContactOutreach(NamedTuple):
     persona: str
     subject: str
     email: str
+    narrative_variant_id: str
 
 
 def find_column(dataframe: pd.DataFrame, candidates: tuple[str, ...]) -> str | None:
@@ -420,7 +238,7 @@ def identify_persona(contact: pd.Series, role_columns: list[str]) -> str:
 
     for persona, patterns in PERSONA_PATTERNS:
         if any(pattern in search_text for pattern in patterns):
-            return persona
+            return map_persona(persona)
     return "Discovery"
 
 
@@ -430,40 +248,40 @@ def build_email(
     persona: str,
     used_emails: set[str] | None = None,
 ) -> ContactOutreach:
-    """Build outreach from a random persona narrative while avoiding batch duplicates."""
+    """Build outreach from one random subject and one random narrative."""
     first_name = get_contact_first_name(name)
     company_text = company or "your organization"
-    variant_set = EMAIL_VARIANTS[persona]
+    active_persona = map_persona(persona)
+    variant_set = get_narrative_set(active_persona)
     used_emails = used_emails if used_emails is not None else set()
 
-    combinations = [
-        (subject_template, narrative, cta)
-        for subject_template in variant_set["subjects"]
-        for narrative in variant_set["narratives"]
-        for cta in CTA_VARIANTS
-    ]
-    random.shuffle(combinations)
+    narrative_options = list(enumerate(variant_set["narratives"], start=1))
+    subject_options = list(enumerate(variant_set["subjects"], start=1))
+    random.shuffle(narrative_options)
+    random.shuffle(subject_options)
 
-    for subject_template, narrative, cta in combinations:
-        subject = subject_template.format(company=company_text)
-        email = (
-            f"Dear {first_name},\n\n"
-            "My name is Helmut von Keyserling, and I support "
-            f"{company_text} as Strategic Account Manager at Metabolon.\n\n"
-            f"{narrative} Metabolon helps teams measure broad biochemical activity "
-            "from research and clinical samples, with results that are designed to be "
-            f"interpretable for scientific decision-making across study designs and existing scientific questions.\n\n"
-            f"{cta}\n\n"
-            "Best regards,\n"
-            "Helmut von Keyserling\n"
-            "Strategic Account Manager"
-        )
-        if email not in used_emails:
-            used_emails.add(email)
-            return ContactOutreach(name, company, persona, subject, email)
+    for narrative_index, narrative in narrative_options:
+        for subject_index, subject_template in subject_options:
+            subject = subject_template.format(company=company_text)
+            email = (
+                f"Dear {first_name},\n\n"
+                "My name is Helmut von Keyserling, and I support "
+                f"{company_text} as Strategic Account Manager at Metabolon.\n\n"
+                f"{narrative}\n\n"
+                "If this is relevant to your work, I would welcome a brief conversation.\n\n"
+                "Best regards,\n\n"
+                "Helmut von Keyserling\n"
+                "Strategic Account Manager"
+            )
+            if email not in used_emails:
+                used_emails.add(email)
+                variant_id = f"{active_persona}-{narrative_index:02d}-S{subject_index:02d}"
+                return ContactOutreach(
+                    name, company, active_persona, subject, email, variant_id
+                )
 
     raise ValueError(
-        f"Could not generate a unique {persona} email for {name} at {company_text}."
+        f"Could not generate a unique {active_persona} email for {name} at {company_text}."
     )
 
 
@@ -488,7 +306,16 @@ def read_contacts(uploaded_file: Any) -> pd.DataFrame:
 
 def empty_output_table() -> pd.DataFrame:
     """Return an empty output table with the required export columns."""
-    return pd.DataFrame(columns=["Name", "Company", "Persona", "Subject", "Email"])
+    return pd.DataFrame(
+        columns=[
+            "Name",
+            "Company",
+            "Persona",
+            "Subject",
+            "Email",
+            "narrative_variant_id",
+        ]
+    )
 
 
 def initialize_session_state() -> None:
@@ -527,7 +354,15 @@ def generate_outreach_table(contacts: pd.DataFrame) -> pd.DataFrame:
 
     progress.empty()
     return pd.DataFrame(
-        rows, columns=["Name", "Company", "Persona", "Subject", "Email"]
+        rows,
+        columns=[
+            "Name",
+            "Company",
+            "Persona",
+            "Subject",
+            "Email",
+            "narrative_variant_id",
+        ],
     )
 
 
