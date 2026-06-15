@@ -1,79 +1,178 @@
-"""Andy Bot V1 Streamlit application.
+"""Andy Bot Streamlit application for rapid Metabolon outreach generation.
 
-A simple local contact intelligence workflow:
-1. Upload a CSV or XLSX file of contacts.
-2. Import contacts into Streamlit session state.
-3. Search and select one contact.
-4. Generate a reusable markdown intelligence report with OpenAI.
-5. Generate an outreach email from the saved report.
+Workflow:
+1. Upload a CSV or XLSX contact list.
+2. Identify each contact persona from title and role fields.
+3. Select the appropriate Metabolon outreach narrative.
+4. Generate only Name, Subject, and Email in a copy/paste table.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import re
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, Literal, NamedTuple
+from typing import Any, NamedTuple
 
 import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 from openai import OpenAI, OpenAIError
 
-OUTPUT_DIR = Path("outputs")
 DEFAULT_MODEL = "gpt-4.1-mini"
+MAX_CONTACTS = 20
 
-DEFAULT_SENDER_NAME = "Helmut von Keyserling"
-DEFAULT_SENDER_TITLE = "Strategic Account Manager"
-DEFAULT_SENDER_COMPANY = "Metabolon"
-DEFAULT_SUPPORTED_ACCOUNT = "the account"
-
-SCIENTIFIC_RELEVANCE_PATTERNS: tuple[tuple[str, str], ...] = (
-    ("Discovery Research", r"\b(discovery research|drug discovery|early discovery|target discovery)\b"),
-    ("Translational Research", r"\b(translational research|translational science|translational medicine)\b"),
-    ("Biomarkers", r"\b(biomarker|biomarkers|pharmacodynamic biomarker|clinical biomarker)\b"),
-    ("Pharmacology", r"\b(pharmacology|pharmacodynamic|pharmacokinetic|pk/pd)\b"),
-    ("Clinical Development", r"\b(clinical development|clinical trial|clinical trials|clinical study|clinical studies)\b"),
-    ("Bioanalytics", r"\b(bioanalytical|bioanalytics|bioanalysis|bioanalytical sciences)\b"),
-    ("Omics", r"\b(omics|metabolomics|proteomics|genomics|transcriptomics|lipidomics)\b"),
-    ("Disease Biology", r"\b(disease biology|biology|immunology|oncology|neuroscience|metabolism|respiratory biology)\b"),
+PERSONAS = (
+    "Discovery",
+    "Translational Research",
+    "Clinical Development",
+    "Clinical Biomarkers",
+    "Bioanalysis",
+    "Medical Affairs",
+    "Epidemiology / HEOR",
+    "Safety / Risk Management",
+    "Computational Biology",
+    "Oncology Research",
+    "Immunology Research",
 )
 
-ORGANIZATIONAL_FIT_KEYWORDS = (
-    "portfolio",
-    "operations",
-    "pmo",
-    "project management",
-    "program management",
-    "risk management",
-    "risk",
-    "procurement",
-    "sourcing",
-    "strategy",
-    "strategic",
-    "finance",
-    "financial",
-    "legal",
-    "compliance",
+PERSONA_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "Epidemiology / HEOR",
+        (
+            "epidemiology",
+            "epidemiologist",
+            "heor",
+            "health economics",
+            "outcomes research",
+            "real world evidence",
+            "rwe",
+            "market access",
+        ),
+    ),
+    (
+        "Safety / Risk Management",
+        (
+            "safety",
+            "pharmacovigilance",
+            "risk management",
+            "patient safety",
+            "drug safety",
+            "benefit risk",
+        ),
+    ),
+    (
+        "Medical Affairs",
+        (
+            "medical affairs",
+            "medical science liaison",
+            "msl",
+            "field medical",
+            "medical director",
+            "scientific affairs",
+        ),
+    ),
+    (
+        "Clinical Biomarkers",
+        (
+            "clinical biomarker",
+            "biomarker",
+            "patient stratification",
+            "companion diagnostic",
+            "diagnostic",
+            "pharmacodynamic biomarker",
+        ),
+    ),
+    (
+        "Clinical Development",
+        (
+            "clinical development",
+            "clinical trial",
+            "clinical operations",
+            "clinical study",
+            "clinical research",
+            "development lead",
+        ),
+    ),
+    (
+        "Bioanalysis",
+        (
+            "bioanalysis",
+            "bioanalytical",
+            "dmpk",
+            "pk/pd",
+            "pharmacokinetic",
+            "pharmacodynamic",
+            "assay",
+            "regulated bioanalysis",
+        ),
+    ),
+    (
+        "Computational Biology",
+        (
+            "computational biology",
+            "bioinformatics",
+            "data science",
+            "systems biology",
+            "multiomics",
+            "multi-omics",
+            "machine learning",
+            "ai/ml",
+        ),
+    ),
+    (
+        "Oncology Research",
+        ("oncology", "cancer", "tumor", "tumour", "immuno-oncology", "io research"),
+    ),
+    (
+        "Immunology Research",
+        ("immunology", "inflammation", "autoimmune", "immune", "immunotherapy"),
+    ),
+    (
+        "Translational Research",
+        (
+            "translational",
+            "translational medicine",
+            "translational science",
+            "bench to bedside",
+            "human biology",
+        ),
+    ),
+    (
+        "Discovery",
+        (
+            "discovery",
+            "drug discovery",
+            "target discovery",
+            "early research",
+            "research scientist",
+            "principal scientist",
+            "biology",
+        ),
+    ),
 )
 
+NARRATIVES = {
+    "Discovery": "Use metabolomics to connect target biology, mechanism, and pathway-level phenotype early enough to shape discovery decisions.",
+    "Translational Research": "Use metabolomics as a bridge between model systems and human samples to clarify mechanism, pharmacology, and translational relevance.",
+    "Clinical Development": "Use metabolomics to read drug response, disease biology, and patient heterogeneity within clinical studies without adding a large operational burden.",
+    "Clinical Biomarkers": "Use metabolomics to discover and validate biomarkers tied to pharmacodynamic response, patient segmentation, and disease activity.",
+    "Bioanalysis": "Use Metabolon's LC-MS metabolomics experience to add broad biochemical context alongside targeted bioanalytical and PK/PD work.",
+    "Medical Affairs": "Use metabolomics evidence to help explain disease biology, treatment response, and clinically meaningful biochemical differences to scientific stakeholders.",
+    "Epidemiology / HEOR": "Use metabolomics to add biological depth to cohorts, outcomes research, RWE, and population-level disease stratification.",
+    "Safety / Risk Management": "Use metabolomics to detect biochemical changes that may help interpret toxicity, off-target effects, and risk signals earlier.",
+    "Computational Biology": "Use metabolomics as a high-dimensional phenotype layer that can strengthen multi-omics models and biological interpretation.",
+    "Oncology Research": "Use metabolomics to characterize tumor metabolism, host response, treatment effect, and resistance biology across oncology studies.",
+    "Immunology Research": "Use metabolomics to understand immune cell state, inflammatory pathways, disease activity, and treatment response in immune-mediated disease.",
+}
 
-SenderFields = dict[str, str]
-FitLevel = Literal["High", "Medium", "Low"]
 
+class ContactOutreach(NamedTuple):
+    """Generated outreach output for one contact."""
 
-class ScientificRelevance(NamedTuple):
-    """Deterministic scientific relevance gate based only on explicit profile text."""
-
-    is_relevant: bool
-    evidence: tuple[str, ...]
-
-
-def clean_filename(value: str) -> str:
-    """Return a filesystem-safe filename stem."""
-    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "_", value.strip())
-    return cleaned.strip("._") or "contact"
+    name: str
+    subject: str
+    email: str
 
 
 def find_name_column(dataframe: pd.DataFrame) -> str | None:
@@ -82,329 +181,32 @@ def find_name_column(dataframe: pd.DataFrame) -> str | None:
         return None
 
     normalized = {column.lower().strip(): column for column in dataframe.columns}
-    for candidate in ("name", "full_name", "full name", "contact", "contact_name", "contact name"):
+    for candidate in (
+        "name",
+        "full_name",
+        "full name",
+        "contact",
+        "contact_name",
+        "contact name",
+    ):
         if candidate in normalized:
             return normalized[candidate]
 
-    text_columns = [column for column in dataframe.columns if dataframe[column].dtype == "object"]
+    text_columns = [
+        column for column in dataframe.columns if dataframe[column].dtype == "object"
+    ]
     return text_columns[0] if text_columns else dataframe.columns[0]
 
 
-def row_to_markdown(contact: pd.Series) -> str:
-    """Format a selected contact row as markdown bullets."""
-    lines: list[str] = []
-    for field, value in contact.items():
-        if pd.isna(value) or str(value).strip() == "":
-            display_value = "Not provided"
-        else:
-            display_value = str(value).strip()
-        lines.append(f"- **{field}:** {display_value}")
-    return "\n".join(lines)
-
-
-def assess_scientific_relevance(contact: pd.Series, linkedin_profile_text: str = "") -> ScientificRelevance:
-    """Return explicit profile signals that earn scientific relevance claims."""
-    evidence: list[str] = []
-    for field, value in contact.items():
-        if pd.isna(value) or str(value).strip() == "":
-            continue
-        display_value = str(value).strip()
-        for label, pattern in SCIENTIFIC_RELEVANCE_PATTERNS:
-            if re.search(pattern, display_value, flags=re.IGNORECASE):
-                evidence.append(f"{label}: {field} = {display_value}")
-                break
-
-    linkedin_profile_text = linkedin_profile_text.strip()
-    if linkedin_profile_text:
-        for label, pattern in SCIENTIFIC_RELEVANCE_PATTERNS:
-            if re.search(pattern, linkedin_profile_text, flags=re.IGNORECASE):
-                evidence.append(f"{label}: LinkedIn Profile Text = {linkedin_profile_text}")
-                break
-
-    return ScientificRelevance(bool(evidence), tuple(dict.fromkeys(evidence)))
-
-
-def format_linkedin_profile_context(linkedin_profile_text: str) -> str:
-    """Format pasted LinkedIn profile content for model prompts."""
-    linkedin_profile_text = linkedin_profile_text.strip()
-    if not linkedin_profile_text:
-        return "LinkedIn Profile Text: Not provided"
-    return f"LinkedIn Profile Text:\n{linkedin_profile_text}"
-
-
-def format_scientific_relevance_report(assessment: ScientificRelevance) -> str:
-    """Format the relevance gate as a visible markdown field for reports and prompts."""
-    evidence_lines = "\n".join(f"   - {item}" for item in assessment.evidence)
-    if not evidence_lines:
-        evidence_lines = "   - None"
-    return (
-        "Scientific Relevance:\n"
-        f"- Scientific Relevance: {'TRUE' if assessment.is_relevant else 'FALSE'}\n"
-        "- Evidence:\n"
-        f"{evidence_lines}"
-    )
-
-
-def attach_scientific_relevance(report: str, assessment: ScientificRelevance) -> str:
-    """Prepend the deterministic relevance gate without relying on model-generated evidence."""
-    if report.lstrip().lower().startswith("scientific relevance:"):
-        return report
-    return f"{format_scientific_relevance_report(assessment)}\n\n{report.strip()}"
-
-
-def build_report_prompt(contact: pd.Series, linkedin_profile_text: str = "") -> str:
-    """Create a prompt for Metabolon-focused contact intelligence."""
-    return f"""
-Create a concise, reusable contact intelligence report from the structured contact details below.
-
-Goal:
-Replicate the outreach style used by Andrew Noel at Metabolon. The report should identify the
-contact's scientific or business identity only when directly supported by the contact details.
-
-Use uploaded contact fields and pasted LinkedIn Profile Text. Do not browse LinkedIn or external websites.
-Do not use Outlook, Gmail, web browsing, or any external enrichment. Do not claim facts that are not present in the data. If information is missing,
-say "Not provided" or "Insufficient information."
-
-Do NOT generate psychological profiles, buying signals, strategic risk assessments, personality
-analyses, or speculative business conclusions.
-
-Extract and return:
-- Current role
-- Seniority level
-- Company
-- Functional area
-- Therapeutic area(s)
-- Top 10-20 recurring keywords
-- Scientific/business themes
-- Likely Metabolon-relevant interests only when direct evidence exists
-- Recommended outreach angle only when direct scientific evidence exists
-
-Assign exactly one primary persona from this list:
-- Discovery Research
-- Translational Research
-- Biomarkers
-- Clinical Development
-- Bioanalytical Sciences
-- Pharmacology
-- Portfolio Strategy
-- Immunology
-- Oncology
-- Respiratory
-- Metabolism
-- Neuroscience
-- Infectious Disease
-- Other
-
-Select exactly one recommended outreach angle from this list:
-- Mechanism of Action
-- Translational Biomarkers
-- Pharmacodynamic Biomarkers
-- Pathway Biology
-- Host Response Biology
-- Metabolic Phenotyping
-- Patient Stratification
-- Quantitative Biology
-- Clinical Biomarkers
-- Discovery Research Support
-- Portfolio Decision Support
-
-Before assigning relevance, determine whether the profile contains direct evidence of involvement in
-Discovery Research, Translational Research, Biomarkers, Pharmacology, Clinical Development,
-Bioanalytics, Omics, or Disease Biology. Do not treat portfolio, risk, strategy, operations, PMO,
-procurement, finance, legal, or leadership language as scientific relevance.
-
-Clearly separate observed facts from inferred themes. Inferences must be conservative and directly
-grounded in the provided contact data. Do not invent interests or priorities.
-
-Return markdown with exactly these sections:
-1. Intelligence Report
-   - Observed Facts
-   - Inferred Themes
-   - Primary Persona
-   - Recommended Outreach Angle
-2. Scientific Relevance
-   - Scientific Relevance: TRUE or FALSE
-   - Evidence: exact profile signals used, or None
-
-Contact details:
-{row_to_markdown(contact)}
-
-Additional contact context:
-{format_linkedin_profile_context(linkedin_profile_text)}
-""".strip()
-
-
-def build_email_prompt(
-    report: str,
-    contact: pd.Series,
-    first_name: str,
-    fit: FitLevel,
-    fit_reason: str,
-    scientific_relevance: ScientificRelevance,
-    sender: SenderFields,
-    linkedin_profile_text: str = "",
-) -> str:
-    """Create a strict LinkedIn-driven outreach email prompt."""
-    greeting_name = first_name or "Colleague"
-    return f"""
-Input:
-- Contact metadata
-- Full LinkedIn profile content
-- Optional LinkedIn posts/activity
-- Optional company/account context
-
-Task:
-Generate a plain-spoken B2B life-sciences outreach email for Metabolon.
-Write like an experienced scientist or biotech account manager sending a real email at 07:30 in the morning.
-
-Critical principle:
-The email must be driven by the prospect's LinkedIn content, not by a generic Metabolon pitch.
-
-Sender context:
-{format_sender_context(sender)}
-
-Recipient first name for greeting: {greeting_name}
-Fit classification: {fit}
-Reason for fit: {fit_reason}
-{format_scientific_relevance_report(scientific_relevance)}
-
-Relevance discipline:
-- Scientific Relevance must be earned before any scientific relevance claim is allowed.
-- Scientific Relevance TRUE requires exact evidence listed above for Discovery Research, Translational
-  Research, Biomarkers, Pharmacology, Clinical Development, Bioanalytics, Omics, or Disease Biology.
-- Scientific Relevance FALSE means the goal is referral discovery, not scientific selling.
-- The email may only use scientific evidence explicitly listed above.
-
-Contact details:
-{row_to_markdown(contact)}
-
-Full LinkedIn profile content and optional LinkedIn posts/activity:
-{format_linkedin_profile_context(linkedin_profile_text)}
-
-Optional company/account context:
-Saved intelligence report:
-{report}
-
-Step 1: Extract the strongest usable hook from LinkedIn.
-Choose only one hook. It must be concrete and visible in the LinkedIn content:
-- current role responsibility
-- career transition
-- therapeutic area
-- biomarker/research focus
-- clinical development responsibility
-- regulated bioanalysis responsibility
-- translational science focus
-- assay/lab/automation responsibility
-- publication/post/topic/activity
-
-If no concrete hook exists, use the job role honestly. Do not invent.
-
-Step 2: Build the email around this sequence:
-1. Dear FirstName,
-2. Concrete observation from LinkedIn.
-3. Thought or hypothesis naturally connected to that observation.
-4. One restrained Metabolon/metabolomics connection.
-5. Simple 20-minute Teams ask.
-6. Redirect sentence if they are not the right person.
-
-Required email shape:
-- The email must read as observation → thought → connection → meeting.
-- Never use the shape observation → question → pitch → meeting.
-- Do not ask generic consulting questions.
-- Make a concrete observation and a hypothesis instead of opening with a question.
-- Use normal spoken business English, not conference-booth language.
-- Include at least one sentence that sounds like a real human observation rather than business language.
-
-Hard rules:
-- 90-130 words.
-- Maximum 6 sentences.
-- Always start with "Dear {greeting_name},"
-- Never start with "My name is..."
-- Never start with Metabolon.
-- Do not use these forbidden openings:
-  - "How do you currently..."
-  - "How are you currently..."
-  - "How do you balance..."
-  - "How do you handle..."
-  - "I noticed..."
-  - "I came across..."
-  - "I saw..."
-- Do not flatter.
-- Do not say "impressive", "extensive leadership", "your work stands out", or similar praise.
-- Do not use generic challenges unless directly tied to the LinkedIn hook.
-- Do not use corporate/vendor language.
-- Do not mention Outlook, Gmail, external enrichment, or unavailable facts.
-- Forbidden terms:
-  capabilities
-  platform
-  solution
-  leverage
-  align
-  synergy
-  value proposition
-  precision medicine
-  support your efforts
-  support your objectives
-  complement your efforts
-  discuss further
-  actionable insights
-  complex therapeutic areas
-  robust scalable
-  resonates with
-  recent trends
-  productive conversation
-  potential intersections
-  explore opportunities
-  relevant to your programs
-  in this space
-  valuable discussion
-  interesting overlap
-  complementary approach
-  scientific insights
-  biological response
-  pathway activity
-
-Metabolon sentence rule:
-Metabolon may appear in only one sentence.
-That sentence must be modest and specific and must not use any forbidden terms.
-
-Quality gate:
-Before returning the email, silently check:
-1. Could this email be sent to 100 other people unchanged?
-2. Does it sound like a vendor template?
-3. Is the LinkedIn hook vague?
-4. Does the pitch arrive before the recipient's world is established?
-5. Could any sentence appear in a pharma conference brochure?
-
-If yes to any, rewrite once. If a sentence could appear in a pharma conference brochure, delete it.
-
-Output only:
-Subject:
-Email:
-
-""".strip()
-
-
-def generate_text(prompt: str, model: str) -> str:
-    """Generate text using the OpenAI Responses API."""
-    client = OpenAI()
-    response = client.responses.create(
-        model=model,
-        input=prompt,
-    )
-    output_text = getattr(response, "output_text", None)
-    if output_text:
-        return str(output_text).strip()
-    return str(response).strip()
-
-
-def save_markdown(contact_name: str, content: str, suffix: str) -> Path:
-    """Save markdown content into outputs/."""
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    path = OUTPUT_DIR / f"{timestamp}_{clean_filename(contact_name)}_{suffix}.md"
-    path.write_text(content + "\n", encoding="utf-8")
-    return path
+def find_role_columns(dataframe: pd.DataFrame) -> list[str]:
+    """Find title and role columns that should drive persona selection."""
+    role_terms = ("title", "role", "position", "job", "function", "department")
+    matches = [
+        column
+        for column in dataframe.columns
+        if any(term in column.lower() for term in role_terms)
+    ]
+    return matches or list(dataframe.columns)
 
 
 def get_contact_name(contact: pd.Series, name_column: str) -> str:
@@ -415,62 +217,106 @@ def get_contact_name(contact: pd.Series, name_column: str) -> str:
     return str(value).strip()
 
 
-def get_contact_first_name(contact: pd.Series, name_column: str) -> str:
-    """Return the contact's first name when a name value is available."""
-    full_name = get_contact_name(contact, name_column)
-    if full_name == "Unnamed Contact":
-        return ""
+def get_contact_first_name(name: str) -> str:
+    """Return the first name from a contact display name."""
+    if name == "Unnamed Contact":
+        return "Colleague"
 
-    name_without_email = re.sub(r"<[^>]+>", "", full_name).strip()
+    name_without_email = re.sub(r"<[^>]+>", "", name).strip()
     name_parts = re.findall(r"[A-Za-z][A-Za-z'’-]*", name_without_email)
-    return name_parts[0] if name_parts else ""
+    return name_parts[0] if name_parts else "Colleague"
 
 
-def classify_contact_fit(
-    contact: pd.Series, report: str = "", linkedin_profile_text: str = ""
-) -> tuple[FitLevel, str]:
-    """Classify outreach fit from explicit contact evidence only."""
-    assessment = assess_scientific_relevance(contact, linkedin_profile_text)
-    contact_text = f"{row_to_markdown(contact)}\n{linkedin_profile_text}".lower()
-    organizational_matches = [keyword for keyword in ORGANIZATIONAL_FIT_KEYWORDS if keyword in contact_text]
-
-    if assessment.is_relevant:
-        return (
-            "High",
-            "Scientific Relevance = TRUE. Exact evidence: " + "; ".join(assessment.evidence) + ".",
-        )
-    if organizational_matches:
-        return (
-            "Medium",
-            "Scientific Relevance = FALSE. Organizational role signals are present, but no direct "
-            "Discovery Research, Translational Research, Biomarkers, Pharmacology, Clinical Development, "
-            "Bioanalytics, Omics, or Disease Biology evidence is shown. Organizational signals: "
-            + ", ".join(organizational_matches[:4])
-            + ".",
-        )
-    if any(keyword in contact_text for keyword in ("pharma", "biotech", "life science", "medical")):
-        return (
-            "Medium",
-            "Scientific Relevance = FALSE. Only broad organizational or industry relevance is present; "
-            "no direct scientific role is shown.",
-        )
-    return (
-        "Low",
-        "Scientific Relevance = FALSE. The provided contact data has insufficient direct evidence of "
-        "Discovery Research, Translational Research, Biomarkers, Pharmacology, Clinical Development, "
-        "Bioanalytics, Omics, or Disease Biology involvement.",
-    )
+def row_to_text(contact: pd.Series, columns: list[str] | None = None) -> str:
+    """Format contact fields as compact text for prompts."""
+    selected_columns = columns or list(contact.index)
+    lines: list[str] = []
+    for field in selected_columns:
+        value = contact.get(field, "")
+        if pd.isna(value) or str(value).strip() == "":
+            continue
+        lines.append(f"{field}: {str(value).strip()}")
+    return "\n".join(lines) or "Not provided"
 
 
-def format_sender_context(sender: SenderFields) -> str:
-    """Format sender configuration for prompt grounding."""
-    return "\n".join(
-        [
-            f"- Sender Name: {sender['name']}",
-            f"- Sender Title: {sender['title']}",
-            f"- Sender Company: {sender['company']}",
-            f"- Supported Account / Customer: {sender['account']}",
-        ]
+def identify_persona(contact: pd.Series, role_columns: list[str]) -> str:
+    """Identify the primary outreach persona from title and role fields."""
+    role_text = " ".join(
+        str(contact.get(column, ""))
+        for column in role_columns
+        if not pd.isna(contact.get(column, ""))
+    ).lower()
+    all_text = row_to_text(contact).lower()
+    search_text = f"{role_text} {all_text}"
+
+    for persona, patterns in PERSONA_PATTERNS:
+        if any(pattern in search_text for pattern in patterns):
+            return persona
+    return "Discovery"
+
+
+def build_email_prompt(
+    contact: pd.Series, name: str, persona: str, narrative: str, role_columns: list[str]
+) -> str:
+    """Create a strict prompt for one persona-specific outreach email."""
+    first_name = get_contact_first_name(name)
+    return f"""
+Generate one Metabolon outreach email.
+
+Output only valid JSON with exactly these keys:
+{{"name":"{name}","subject":"...","email":"..."}}
+
+Contact name: {name}
+Recipient first name: {first_name}
+Identified persona: {persona}
+Metabolon outreach narrative: {narrative}
+
+Title and role evidence:
+{row_to_text(contact, role_columns)}
+
+Other CSV context:
+{row_to_text(contact)}
+
+Style requirements:
+- Similar in style to Andrew Noel outreach emails: direct, plain-spoken, scientifically literate, specific, and restrained.
+- Persona-specific and scientifically relevant to the identified persona.
+- Simple meeting request.
+- No reports, explanations, scores, reasoning, or markdown.
+
+Email rules:
+- 80-140 words.
+- Start exactly with: Dear {first_name},
+- Mention Metabolon at most once.
+- Do not start with "My name is", "I noticed", "I came across", or "I saw".
+- Avoid vendor language and do not use: capabilities, platform, solution, leverage, synergy, value proposition, actionable insights, discuss further.
+- Close with a simple request for a brief meeting or 20-minute conversation.
+""".strip()
+
+
+def generate_text(prompt: str, model: str) -> str:
+    """Generate text using the OpenAI Responses API."""
+    client = OpenAI()
+    response = client.responses.create(model=model, input=prompt)
+    output_text = getattr(response, "output_text", None)
+    if output_text:
+        return str(output_text).strip()
+    return str(response).strip()
+
+
+def parse_outreach(raw_output: str, fallback_name: str) -> ContactOutreach:
+    """Parse model JSON into stable table fields."""
+    cleaned = raw_output.strip()
+    cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
+    cleaned = re.sub(r"\s*```$", "", cleaned)
+    try:
+        payload = json.loads(cleaned)
+    except json.JSONDecodeError:
+        return ContactOutreach(fallback_name, "", cleaned)
+
+    return ContactOutreach(
+        str(payload.get("name") or fallback_name).strip(),
+        str(payload.get("subject") or "").strip(),
+        str(payload.get("email") or "").strip(),
     )
 
 
@@ -484,50 +330,54 @@ def read_contacts(uploaded_file: Any) -> pd.DataFrame:
     raise ValueError("Upload a CSV or XLSX file.")
 
 
-def reset_generated_outputs() -> None:
-    """Clear generated artifacts that depend on the selected contact."""
-    st.session_state.report = ""
-    st.session_state.report_path = ""
-    st.session_state.email = ""
-    st.session_state.email_path = ""
-
-
 def initialize_session_state() -> None:
     """Initialize workflow session state keys."""
     defaults = {
         "contacts": None,
         "uploaded_filename": "",
-        "selected_contact_index": None,
-        "report": "",
-        "report_path": "",
-        "email": "",
-        "email_path": "",
-        "linkedin_profile_text_by_contact": {},
+        "generated_emails": pd.DataFrame(columns=["Name", "Subject", "Email"]),
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
 
 
-def filter_contacts(contacts: pd.DataFrame, query: str) -> pd.DataFrame:
-    """Return contacts with any cell containing the search query."""
-    if not query.strip():
-        return contacts
+def generate_outreach_table(contacts: pd.DataFrame, model: str) -> pd.DataFrame:
+    """Generate outreach for up to 20 contacts and return copy/paste table columns only."""
+    name_column = find_name_column(contacts)
+    if not name_column:
+        raise ValueError("Could not find any columns in the uploaded file.")
 
-    normalized_query = query.strip().lower()
-    row_matches = contacts.astype(str).apply(
-        lambda row: row.str.lower().str.contains(normalized_query, na=False, regex=False).any(),
-        axis=1,
-    )
-    return contacts[row_matches]
+    role_columns = find_role_columns(contacts)
+    rows: list[ContactOutreach] = []
+    progress = st.progress(0, text="Generating emails...")
+
+    contacts_to_process = contacts.head(MAX_CONTACTS)
+    for position, (_, contact) in enumerate(contacts_to_process.iterrows(), start=1):
+        name = get_contact_name(contact, name_column)
+        persona = identify_persona(contact, role_columns)
+        narrative = NARRATIVES[persona]
+        raw_output = generate_text(
+            build_email_prompt(contact, name, persona, narrative, role_columns), model
+        )
+        rows.append(parse_outreach(raw_output, name))
+        progress.progress(
+            position / len(contacts_to_process),
+            text=f"Generated {position} of {len(contacts_to_process)} emails",
+        )
+
+    progress.empty()
+    return pd.DataFrame(rows, columns=["Name", "Subject", "Email"])
 
 
 def main() -> None:
     load_dotenv()
-    st.set_page_config(page_title="Andy Bot V1", page_icon="🤖", layout="wide")
+    st.set_page_config(page_title="Andy Bot", page_icon="🤖", layout="wide")
     initialize_session_state()
 
-    st.title("🤖 Andy Bot V1")
-    st.caption("Upload contacts, select one contact, generate a reusable intelligence report, then draft outreach.")
+    st.title("🤖 Andy Bot")
+    st.caption(
+        "Upload a CSV contact list and generate Name, Subject, and Email for up to 20 contacts."
+    )
 
     with st.sidebar:
         st.header("Settings")
@@ -536,15 +386,14 @@ def main() -> None:
             value=os.getenv("OPENAI_MODEL", DEFAULT_MODEL),
             help="Override with any model available to your API key.",
         )
-        st.subheader("Sender")
-        sender_name = st.text_input("Sender Name", value=DEFAULT_SENDER_NAME)
-        sender_title = st.text_input("Sender Title", value=DEFAULT_SENDER_TITLE)
-        sender_company = st.text_input("Sender Company", value=DEFAULT_SENDER_COMPANY)
-        supported_account = st.text_input("Supported Account / Customer", value=DEFAULT_SUPPORTED_ACCOUNT)
-        st.info("Outlook, LinkedIn scraping, and Gmail integrations are intentionally not included in V1.")
 
-    uploaded_file = st.file_uploader("Upload contacts CSV or XLSX", type=["csv", "xlsx", "xls"])
-    if uploaded_file is not None and uploaded_file.name != st.session_state.uploaded_filename:
+    uploaded_file = st.file_uploader(
+        "Upload contacts CSV or XLSX", type=["csv", "xlsx", "xls"]
+    )
+    if (
+        uploaded_file is not None
+        and uploaded_file.name != st.session_state.uploaded_filename
+    ):
         try:
             contacts = read_contacts(uploaded_file)
         except Exception as exc:  # pandas parsing errors vary by file type and version
@@ -557,154 +406,53 @@ def main() -> None:
 
         st.session_state.contacts = contacts
         st.session_state.uploaded_filename = uploaded_file.name
-        st.session_state.selected_contact_index = None
-        st.session_state.linkedin_profile_text_by_contact = {}
-        reset_generated_outputs()
-        st.success(f"Imported {len(contacts)} contacts into this session.")
+        st.session_state.generated_emails = pd.DataFrame(
+            columns=["Name", "Subject", "Email"]
+        )
+        st.success(
+            f"Imported {len(contacts)} contacts. Andy Bot will process the first {min(len(contacts), MAX_CONTACTS)}."
+        )
 
     contacts = st.session_state.contacts
     if contacts is None:
         st.warning("Upload a CSV or XLSX file to get started.")
         return
 
-    name_column = find_name_column(contacts)
-    if not name_column:
-        st.error("Could not find any columns in the uploaded file.")
-        return
+    preview_contacts = contacts.head(MAX_CONTACTS)
+    st.subheader("Contacts to Process")
+    st.dataframe(preview_contacts, use_container_width=True)
 
-    st.subheader("Searchable Contacts Table")
-    search_query = st.text_input("Search contacts", placeholder="Search any field in the uploaded contacts...")
-    filtered_contacts = filter_contacts(contacts, search_query)
-    st.dataframe(filtered_contacts, use_container_width=True)
-
-    if filtered_contacts.empty:
-        st.warning("No contacts match your search.")
-        return
-
-    contact_options = {
-        f"{get_contact_name(row, name_column)} (row {index + 1})": index
-        for index, row in filtered_contacts.iterrows()
-    }
-    selected_label = st.selectbox("Select one contact", list(contact_options.keys()))
-    selected_index = contact_options[selected_label]
-
-    if st.session_state.selected_contact_index != selected_index:
-        st.session_state.selected_contact_index = selected_index
-        reset_generated_outputs()
-
-    selected_contact = contacts.loc[selected_index]
-    selected_name = get_contact_name(selected_contact, name_column)
-    selected_first_name = get_contact_first_name(selected_contact, name_column)
-    sender: SenderFields = {
-        "name": sender_name.strip() or DEFAULT_SENDER_NAME,
-        "title": sender_title.strip() or DEFAULT_SENDER_TITLE,
-        "company": sender_company.strip() or DEFAULT_SENDER_COMPANY,
-        "account": supported_account.strip() or DEFAULT_SUPPORTED_ACCOUNT,
-    }
-
-    st.subheader("Selected Contact Details")
-    details = pd.DataFrame(
-        {
-            "Field": selected_contact.index,
-            "Value": ["" if pd.isna(value) else str(value) for value in selected_contact.values],
-        }
-    )
-    st.table(details)
-
-    linkedin_profile_texts: dict[int, str] = st.session_state.linkedin_profile_text_by_contact
-    stored_linkedin_profile_text = linkedin_profile_texts.get(selected_index, "")
-    linkedin_profile_text = st.text_area(
-        "LinkedIn Profile Text",
-        value=stored_linkedin_profile_text,
-        key=f"linkedin_profile_text_{st.session_state.uploaded_filename}_{selected_index}",
-        height=240,
-        placeholder="Paste copied LinkedIn profile content here...",
-        help="Optional. This text is used only as added context for the selected contact during this session.",
-    )
-    if linkedin_profile_text != stored_linkedin_profile_text:
-        linkedin_profile_texts[selected_index] = linkedin_profile_text
-        reset_generated_outputs()
-
-    if st.button("Generate reusable intelligence report", type="primary"):
-        if not model.strip():
-            st.error("Enter an OpenAI model before generating a report.")
-            return
-
-        with st.spinner("Generating report with OpenAI..."):
-            try:
-                scientific_relevance = assess_scientific_relevance(selected_contact, linkedin_profile_text)
-                generated_report = generate_text(
-                    build_report_prompt(selected_contact, linkedin_profile_text), model.strip()
-                )
-                report = attach_scientific_relevance(generated_report, scientific_relevance)
-                report_path = save_markdown(selected_name, report, "report")
-            except OpenAIError as exc:
-                st.error(f"OpenAI request failed: {exc}")
-                return
-            except Exception as exc:
-                st.error(f"Could not generate or save the report: {exc}")
-                return
-
-        st.session_state.report = report
-        st.session_state.report_path = str(report_path)
-        st.session_state.email = ""
-        st.session_state.email_path = ""
-        st.success(f"Report saved to {report_path}")
-
-    if st.session_state.report:
-        st.subheader("Saved Intelligence Report")
-        st.markdown(st.session_state.report)
-        st.download_button(
-            "Download markdown report",
-            data=st.session_state.report,
-            file_name=Path(st.session_state.report_path).name,
-            mime="text/markdown",
+    if len(contacts) > MAX_CONTACTS:
+        st.info(
+            f"Only the first {MAX_CONTACTS} contacts will be processed to keep the workflow under 10 minutes."
         )
 
-        if st.button("Generate outreach email from saved report"):
-            if not model.strip():
-                st.error("Enter an OpenAI model before generating an email.")
-                return
+    if st.button("Generate emails", type="primary"):
+        if not model.strip():
+            st.error("Enter an OpenAI model before generating emails.")
+            return
 
-            with st.spinner("Generating outreach email with OpenAI..."):
-                try:
-                    scientific_relevance = assess_scientific_relevance(selected_contact, linkedin_profile_text)
-                    fit, fit_reason = classify_contact_fit(
-                        selected_contact, st.session_state.report, linkedin_profile_text
-                    )
-                    email = generate_text(
-                        build_email_prompt(
-                            st.session_state.report,
-                            selected_contact,
-                            selected_first_name,
-                            fit,
-                            fit_reason,
-                            scientific_relevance,
-                            sender,
-                            linkedin_profile_text,
-                        ),
-                        model.strip(),
-                    )
-                    email_path = save_markdown(selected_name, email, "outreach_email")
-                except OpenAIError as exc:
-                    st.error(f"OpenAI request failed: {exc}")
-                    return
-                except Exception as exc:
-                    st.error(f"Could not generate or save the outreach email: {exc}")
-                    return
+        try:
+            st.session_state.generated_emails = generate_outreach_table(
+                contacts, model.strip()
+            )
+        except OpenAIError as exc:
+            st.error(f"OpenAI request failed: {exc}")
+            return
+        except Exception as exc:
+            st.error(f"Could not generate emails: {exc}")
+            return
 
-            st.session_state.email = email
-            st.session_state.email_path = str(email_path)
-            st.success(f"Outreach email saved to {email_path}")
-
-    if st.session_state.email:
-        st.subheader("Generated Outreach Email")
-        st.markdown(st.session_state.email)
+    if not st.session_state.generated_emails.empty:
+        st.subheader("Generated Emails")
+        st.dataframe(
+            st.session_state.generated_emails, use_container_width=True, hide_index=True
+        )
         st.download_button(
-            "Download outreach email",
-            data=st.session_state.email,
-            file_name=Path(st.session_state.email_path).name,
-            mime="text/markdown",
+            "Download CSV",
+            data=st.session_state.generated_emails.to_csv(index=False),
+            file_name="andy_bot_generated_emails.csv",
+            mime="text/csv",
         )
 
 

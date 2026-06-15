@@ -1,6 +1,19 @@
-# Andy Bot V1
+# Andy Bot
 
-Andy Bot V1 is a Streamlit app for generating a basic markdown contact intelligence report from an uploaded contacts CSV.
+Andy Bot is a Streamlit app for rapid Metabolon outreach generation from an uploaded contact list.
+
+## Workflow
+
+1. Upload a CSV or XLSX contact list.
+2. Andy Bot processes up to 20 contacts.
+3. It identifies each contact persona from title and role fields.
+4. It selects a persona-specific Metabolon outreach narrative.
+5. It generates a copy/paste table with only:
+   - Name
+   - Subject
+   - Email
+
+Generated emails are constrained to 80-140 words, start with `Dear FirstName,`, use persona-specific scientific context, and include a simple meeting request.
 
 ## Setup
 
@@ -24,16 +37,8 @@ streamlit run app.py
 
 ## Local testing
 
-Local tests and checks are optional for this small app, but they require the same dependencies used by the application. Before running local testing commands, install the requirements:
-
-```bash
-pip install -r requirements.txt
-```
-
 A lightweight syntax check can be run with:
 
 ```bash
 python -m py_compile app.py
 ```
-
-`pytest` is not required at runtime and is intentionally not included in `requirements.txt`. If you add pytest-based tests later, install pytest separately in your development environment.
