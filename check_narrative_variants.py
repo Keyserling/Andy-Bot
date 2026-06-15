@@ -9,7 +9,12 @@ from zipfile import ZipFile
 
 import pandas as pd
 
-from app import build_email, classify_persona, validate_contact_integrity
+from app import (
+    build_email,
+    classify_persona,
+    generate_outreach_table,
+    validate_contact_integrity,
+)
 from metabolon_knowledge import recommend_metabolon_story
 from draft_exports import EMLDraftProvider, SENDER_NOT_CONFIGURED_NOTE
 from narratives import NARRATIVE_LIBRARY, PERSONAS
@@ -49,6 +54,47 @@ def main() -> None:
                 raise AssertionError(
                     f"Forbidden phrase {phrase!r} found in {contact.narrative_variant_id}"
                 )
+
+    linkedin_text = (
+        "LinkedIn profile summary with metabolomics-relevant publication history "
+        "and translational research leadership."
+    )
+    linkedin_rows = generate_outreach_table(
+        pd.DataFrame(
+            [
+                {
+                    "Name": "LinkedIn Example",
+                    "Company": "ExampleCo",
+                    "Email": "linkedin@example.com",
+                    "Title": "Discovery Scientist",
+                    "LinkedIn Content": linkedin_text,
+                }
+            ]
+        )
+    )
+    if linkedin_rows.loc[0, "LinkedIn Content Available"] != "Yes":
+        raise AssertionError("LinkedIn Content rows must be marked available")
+    if linkedin_rows.loc[0, "LinkedIn Content Preview"] != linkedin_text[:200]:
+        raise AssertionError(
+            "LinkedIn Content preview must contain the first 200 characters"
+        )
+
+    normal_rows = generate_outreach_table(
+        pd.DataFrame(
+            [
+                {
+                    "Name": "Normal Example",
+                    "Company": "ExampleCo",
+                    "Email": "normal@example.com",
+                    "Title": "Discovery Scientist",
+                }
+            ]
+        )
+    )
+    if normal_rows.loc[0, "LinkedIn Content Available"] != "No":
+        raise AssertionError("Rows without LinkedIn Content must still work")
+    if normal_rows.loc[0, "LinkedIn Content Preview"] != "":
+        raise AssertionError("Rows without LinkedIn Content must have an empty preview")
 
     if len(variant_ids) < 6:
         raise AssertionError(
