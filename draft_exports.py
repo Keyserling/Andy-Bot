@@ -6,6 +6,7 @@ They intentionally do not classify contacts or generate narrative copy.
 
 from __future__ import annotations
 
+import os
 from abc import ABC, abstractmethod
 from email.message import EmailMessage
 from io import BytesIO
@@ -14,6 +15,9 @@ from zipfile import ZIP_DEFLATED, ZipFile
 import pandas as pd
 
 DRAFT_COLUMNS = ["To", "Subject", "Body"]
+DEFAULT_SENDER_NAME = "Helmut von Keyserling"
+DEFAULT_SENDER_EMAIL = "helmut.vonkeyserling@metabolon.com"
+SENDER_NOT_CONFIGURED_NOTE = "Open as draft and choose sender in Outlook."
 
 
 class DraftProvider(ABC):
@@ -34,6 +38,13 @@ class CSVDraftProvider(DraftProvider):
 class EMLDraftProvider(DraftProvider):
     """Export draft rows to a ZIP file containing one .eml file per contact."""
 
+    def __init__(self, sender_email: str | None = None) -> None:
+        self.sender_email = (
+            os.getenv("METABOLON_SENDER_EMAIL", "")
+            if sender_email is None
+            else sender_email
+        )
+
     def export(self, drafts: pd.DataFrame) -> bytes:
         zip_buffer = BytesIO()
         with ZipFile(zip_buffer, "w", ZIP_DEFLATED) as archive:
@@ -42,7 +53,14 @@ class EMLDraftProvider(DraftProvider):
                 message = EmailMessage()
                 message["To"] = str(draft.To)
                 message["Subject"] = str(draft.Subject)
-                message.set_content(str(draft.Body))
+                body = str(draft.Body)
+                if self.sender_email:
+                    message["From"] = (
+                        f"{DEFAULT_SENDER_NAME} <{DEFAULT_SENDER_EMAIL}>"
+                    )
+                else:
+                    body = f"{SENDER_NOT_CONFIGURED_NOTE}\n\n{body}"
+                message.set_content(body)
                 archive.writestr(f"contact_{position:03d}.eml", message.as_bytes())
         return zip_buffer.getvalue()
 

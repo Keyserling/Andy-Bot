@@ -3,7 +3,7 @@
 Workflow:
 1. Upload a CSV contact list.
 2. Classify each contact into one persona.
-3. Randomly select from persona-specific narrative and subject variants.
+3. Randomly select from persona-specific subject and use-case variants.
 4. Generate Name, Company, Persona, Subject, and Email for CSV export.
 """
 
@@ -24,7 +24,6 @@ OLD_TO_NEW_PERSONA = {
     "Clinical Development": "Translational / Clinical Development",
     "Clinical Biomarkers": "Biomarkers / Bioanalysis",
     "Bioanalysis": "Biomarkers / Bioanalysis",
-    "Clinical Pharmacology": "Biomarkers / Bioanalysis",
     "Safety/Risk": "Safety / Quality",
     "Immunology": "Discovery",
     "Computational Biology": "Discovery",
@@ -389,7 +388,7 @@ def build_email(
     source_first_name: str = "",
     used_emails: set[str] | None = None,
 ) -> ContactOutreach:
-    """Build outreach from one random subject and one random narrative."""
+    """Build outreach from one random subject and one persona-specific use case."""
     first_name = get_contact_first_name(name, source_first_name)
     company_text = company or "your organization"
     active_persona = map_persona(persona)
@@ -409,29 +408,35 @@ def build_email(
     variant_set = get_narrative_set(active_persona)
     used_emails = used_emails if used_emails is not None else set()
 
-    narrative_options = list(enumerate(variant_set["narratives"], start=1))
+    use_case_options = list(enumerate(variant_set["use_cases"], start=1))
     subject_options = list(enumerate(variant_set["subjects"], start=1))
-    random.shuffle(narrative_options)
+    random.shuffle(use_case_options)
     random.shuffle(subject_options)
 
-    for narrative_index, narrative in narrative_options:
+    persona_label = active_persona.lower()
+    benefits = "\n".join(f"• {benefit}" for benefit in variant_set["benefits"])
+
+    for use_case_index, use_case in use_case_options:
         for subject_index, subject_template in subject_options:
             subject = subject_template.format(company=company_text)
             email = (
                 f"Dear {first_name},\n\n"
                 "My name is Helmut von Keyserling, and I support "
                 f"{company_text} as Strategic Account Manager at Metabolon.\n\n"
-                f"{narrative}\n\n"
-                "If this is relevant to your work, I would welcome a brief conversation.\n\n"
+                f"Many {persona_label} teams are using metabolomics to {use_case}.\n\n"
+                f"This type of data can help:\n{benefits}\n\n"
+                "Metabolon generates deep quantitative metabolomics datasets that help "
+                f"{persona_label} teams interpret functional biology beyond traditional "
+                "assays/readouts.\n\n"
+                "If this is of interest, I would be happy to briefly introduce our approach "
+                "and learn how your team is thinking about this area.\n\n"
                 "Best regards,\n\n"
                 "Helmut von Keyserling\n"
                 "Strategic Account Manager"
             )
             if email not in used_emails:
                 used_emails.add(email)
-                variant_id = (
-                    f"{active_persona}-{narrative_index:02d}-S{subject_index:02d}"
-                )
+                variant_id = f"{active_persona}-{use_case_index:02d}-S{subject_index:02d}"
                 return ContactOutreach(
                     name,
                     company,
