@@ -206,6 +206,8 @@ class ContactOutreach(NamedTuple):
     recommended_offering: str
     scientific_problem: str
     email_story: str
+    linkedin_content_available: str
+    linkedin_content_preview: str
 
 
 def find_column(dataframe: pd.DataFrame, candidates: tuple[str, ...]) -> str | None:
@@ -304,6 +306,18 @@ def find_linkedin_title_column(dataframe: pd.DataFrame) -> str | None:
             "title",
             "job title",
             "job_title",
+        ),
+    )
+
+
+def find_linkedin_content_column(dataframe: pd.DataFrame) -> str | None:
+    """Find the optional LinkedIn content column for future personalization hooks."""
+    return find_column(
+        dataframe,
+        (
+            "linkedin text",
+            "linkedin content",
+            "linkedin profile text",
         ),
     )
 
@@ -691,6 +705,8 @@ def build_email(
     integrity: ContactIntegrity | None = None,
     title: str = "",
     therapeutic_area: str = "",
+    linkedin_content_available: str = "No",
+    linkedin_content_preview: str = "",
 ) -> ContactOutreach:
     """Build outreach from one random subject and one persona-specific use case."""
     integrity = integrity or ContactIntegrity(
@@ -717,6 +733,8 @@ def build_email(
             "",
             "",
             "",
+            linkedin_content_available,
+            linkedin_content_preview,
         )
     active_persona = map_persona(persona)
     if active_persona == "Operations / Low Priority":
@@ -738,6 +756,8 @@ def build_email(
             "",
             "",
             "",
+            linkedin_content_available,
+            linkedin_content_preview,
         )
 
     metabolon_story = recommend_metabolon_story(
@@ -796,6 +816,8 @@ def build_email(
                     metabolon_story.recommended_offering,
                     metabolon_story.scientific_problem,
                     metabolon_story.email_story,
+                    linkedin_content_available,
+                    linkedin_content_preview,
                 )
 
     raise ValueError(
@@ -843,6 +865,8 @@ def empty_output_table() -> pd.DataFrame:
             "Recommended Offering",
             "Scientific Problem",
             "Email Story",
+            "LinkedIn Content Available",
+            "LinkedIn Content Preview",
         ]
     )
 
@@ -870,6 +894,7 @@ def generate_outreach_table(contacts: pd.DataFrame) -> pd.DataFrame:
     email_column = find_email_column(contacts)
     linkedin_company_column = find_linkedin_company_column(contacts)
     linkedin_title_column = find_linkedin_title_column(contacts)
+    linkedin_content_column = find_linkedin_content_column(contacts)
     first_name_column = find_first_name_column(contacts)
     role_columns = find_role_columns(contacts)
     rows: list[ContactOutreach] = []
@@ -887,6 +912,9 @@ def generate_outreach_table(contacts: pd.DataFrame) -> pd.DataFrame:
         source_first_name = get_cell_value(contact, first_name_column, "")
         linkedin_company = get_cell_value(contact, linkedin_company_column, "")
         linkedin_title = get_cell_value(contact, linkedin_title_column, "")
+        linkedin_content = get_cell_value(contact, linkedin_content_column, "")
+        linkedin_content_available = "Yes" if linkedin_content else "No"
+        linkedin_content_preview = linkedin_content[:200]
         integrity = validate_contact_integrity(
             company, to, linkedin_company, linkedin_title
         )
@@ -904,6 +932,8 @@ def generate_outreach_table(contacts: pd.DataFrame) -> pd.DataFrame:
                 integrity,
                 linkedin_title or row_to_text(contact, role_columns),
                 row_to_text(contact),
+                linkedin_content_available,
+                linkedin_content_preview,
             )
         )
         progress.progress(
@@ -932,6 +962,8 @@ def generate_outreach_table(contacts: pd.DataFrame) -> pd.DataFrame:
             "Recommended Offering",
             "Scientific Problem",
             "Email Story",
+            "LinkedIn Content Available",
+            "LinkedIn Content Preview",
         ],
     )
 
