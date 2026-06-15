@@ -16,6 +16,7 @@ from typing import Any, NamedTuple
 import pandas as pd
 import streamlit as st
 
+from draft_exports import CSVDraftProvider, EMLDraftProvider
 from narratives import get_narrative_set
 
 OLD_TO_NEW_PERSONA = {
@@ -183,6 +184,7 @@ class ContactOutreach(NamedTuple):
 
     name: str
     company: str
+    to: str
     persona: str
     persona_confidence_score: float
     subject: str
@@ -234,6 +236,24 @@ def find_company_column(dataframe: pd.DataFrame) -> str | None:
             "organization",
             "organisation",
             "employer",
+        ),
+    )
+
+
+def find_email_column(dataframe: pd.DataFrame) -> str | None:
+    """Find the most likely recipient email-address column."""
+    return find_column(
+        dataframe,
+        (
+            "email",
+            "email address",
+            "email_address",
+            "e-mail",
+            "e-mail address",
+            "work email",
+            "work_email",
+            "business email",
+            "business_email",
         ),
     )
 
@@ -363,6 +383,7 @@ def build_email(
     name: str,
     company: str,
     persona: str,
+    to: str = "",
     persona_confidence_score: float = 0.35,
     matched_keyword: str = "",
     source_first_name: str = "",
@@ -376,6 +397,7 @@ def build_email(
         return ContactOutreach(
             name,
             company,
+            to,
             active_persona,
             persona_confidence_score,
             "Review manually",
@@ -413,6 +435,7 @@ def build_email(
                 return ContactOutreach(
                     name,
                     company,
+                    to,
                     persona,
                     persona_confidence_score,
                     subject,
@@ -451,6 +474,7 @@ def empty_output_table() -> pd.DataFrame:
         columns=[
             "Name",
             "Company",
+            "To",
             "Persona",
             "Persona Confidence Score",
             "Subject",
@@ -467,6 +491,8 @@ def initialize_session_state() -> None:
         "contacts": None,
         "uploaded_filename": "",
         "generated_emails": empty_output_table(),
+        "outlook_draft_csv": b"",
+        "outlook_draft_zip": b"",
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -479,6 +505,7 @@ def generate_outreach_table(contacts: pd.DataFrame) -> pd.DataFrame:
         raise ValueError("Could not find any columns in the uploaded file.")
 
     company_column = find_company_column(contacts)
+    email_column = find_email_column(contacts)
     first_name_column = find_first_name_column(contacts)
     role_columns = find_role_columns(contacts)
     rows: list[ContactOutreach] = []
@@ -489,6 +516,7 @@ def generate_outreach_table(contacts: pd.DataFrame) -> pd.DataFrame:
     for position, (_, contact) in enumerate(contacts.iterrows(), start=1):
         name = get_cell_value(contact, name_column, "Unnamed Contact")
         company = get_cell_value(contact, company_column, "")
+        to = get_cell_value(contact, email_column, "")
         source_first_name = get_cell_value(contact, first_name_column, "")
         classification = classify_persona(contact, role_columns)
         rows.append(
@@ -496,6 +524,7 @@ def generate_outreach_table(contacts: pd.DataFrame) -> pd.DataFrame:
                 name,
                 company,
                 classification.persona,
+                to,
                 classification.confidence_score,
                 classification.matched_keyword,
                 source_first_name,
@@ -513,6 +542,7 @@ def generate_outreach_table(contacts: pd.DataFrame) -> pd.DataFrame:
         columns=[
             "Name",
             "Company",
+            "To",
             "Persona",
             "Persona Confidence Score",
             "Subject",
@@ -520,6 +550,22 @@ def generate_outreach_table(contacts: pd.DataFrame) -> pd.DataFrame:
             "Matched Keyword",
             "Narrative Variant ID",
         ],
+    )
+
+
+def build_draft_table(generated_emails: pd.DataFrame) -> pd.DataFrame:
+    """Convert generated outreach rows into draft export rows."""
+    return generated_emails.rename(
+        columns={"Email": "Body"}
+    )[["To", "Subject", "Body"]].copy()
+
+
+def build_outlook_draft_exports(generated_emails: pd.DataFrame) -> tuple[bytes, bytes]:
+    """Create Outlook-compatible CSV and zipped EML draft exports."""
+    draft_table = build_draft_table(generated_emails)
+    return (
+        CSVDraftProvider().export(draft_table),
+        EMLDraftProvider().export(draft_table),
     )
 
 
@@ -559,6 +605,8 @@ def main() -> None:
         st.session_state.contacts = contacts
         st.session_state.uploaded_filename = uploaded_file.name
         st.session_state.generated_emails = empty_output_table()
+        st.session_state.outlook_draft_csv = b""
+        st.session_state.outlook_draft_zip = b""
         st.success(
             f"Imported {len(contacts)} contacts. Andy Bot will export one email per contact."
         )
@@ -574,6 +622,8 @@ def main() -> None:
     if st.button("Generate emails", type="primary"):
         try:
             st.session_state.generated_emails = generate_outreach_table(contacts)
+            st.session_state.outlook_draft_csv = b""
+            st.session_state.outlook_draft_zip = b""
         except Exception as exc:
             st.error(f"Could not generate emails: {exc}")
             return
@@ -628,6 +678,34 @@ def main() -> None:
             file_name="andy_bot_persona_emails.csv",
             mime="text/csv",
         )
+
+        st.subheader("Outlook Draft Export")
+        st.caption(
+            "Create Outlook-ready draft files with To, Subject, and Body for review before sending."
+        )
+        if st.button("Create Outlook Drafts"):
+            try:
+                (
+                    st.session_state.outlook_draft_csv,
+                    st.session_state.outlook_draft_zip,
+                ) = build_outlook_draft_exports(st.session_state.generated_emails)
+            except Exception as exc:
+                st.error(f"Could not create Outlook drafts: {exc}")
+                return
+
+        if st.session_state.outlook_draft_csv and st.session_state.outlook_draft_zip:
+            st.download_button(
+                "Download Outlook import CSV",
+                data=st.session_state.outlook_draft_csv,
+                file_name="outlook_drafts.csv",
+                mime="text/csv",
+            )
+            st.download_button(
+                "Download Outlook Drafts ZIP",
+                data=st.session_state.outlook_draft_zip,
+                file_name="outlook_drafts.zip",
+                mime="application/zip",
+            )
 
 
 if __name__ == "__main__":
