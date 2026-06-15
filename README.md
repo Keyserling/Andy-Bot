@@ -1,30 +1,27 @@
 # Andy Bot
 
-Andy Bot is a Streamlit app for generating varied persona-based Metabolon outreach from an uploaded CSV contact list.
+Andy Bot is a Streamlit app for generating varied persona-based Metabolon outreach from an uploaded CSV or Excel contact list.
 
 ## Workflow
 
-1. Upload a CSV contact list.
-2. Andy Bot classifies every contact into exactly one persona:
+1. Upload a CSV or Excel contact list.
+2. Andy Bot classifies every contact into exactly one of six active personas:
    - Discovery
-   - Translational Research
-   - Clinical Biomarkers
-   - Clinical Development
+   - Translational / Clinical Development
+   - Biomarkers / Bioanalysis
    - Medical Affairs
+   - Safety / Quality
    - Oncology
-   - Immunology
-   - Safety/Risk
-   - Bioanalysis
-   - Computational Biology
-3. It randomly selects one of five narrative variants and one of five subject-line variants for that persona.
+3. It randomly selects one of ten subject lines and one of ten complete narrative paragraphs for that persona.
 4. It generates and exports a table with one row per contact:
    - Name
    - Company
    - Persona
    - Subject
    - Email
+   - narrative_variant_id
 
-Generated emails keep persona classification, persona assignment, and the CSV workflow, while varying the outreach copy within each persona. Each persona has five narrative variants, five subject-line variants, and several concise call-to-action variants. Emails start with `Dear FirstName,`, introduce Helmut von Keyserling as Strategic Account Manager at Metabolon, use simple scientific language, avoid marketing-heavy personalization, and close with Helmut von Keyserling's signature. The app avoids starting the narrative paragraph with `For X teams...` and tracks generated email bodies so identical emails are not repeated within the same batch. The app does not use fake flattery, over-personalization, LinkedIn profile analysis, long reports, contact intelligence reports, why-this-person outputs, or confidence scores.
+Generated emails keep the existing upload/import workflow and persona classification logic, with legacy persona matches mapped into the six active personas. The email body uses a fixed greeting, Helmut von Keyserling introduction, one selected narrative paragraph, the requested relevance sentence, and Helmut's signature.
 
 ## Setup
 
@@ -34,7 +31,7 @@ Install the runtime dependencies before running the app:
 pip install -r requirements.txt
 ```
 
-No OpenAI API key is required because generated emails come from local templates.
+No OpenAI API key is required because generated emails come from the local narrative library.
 
 ## Run the app
 
@@ -42,10 +39,16 @@ No OpenAI API key is required because generated emails come from local templates
 streamlit run app.py
 ```
 
-## Local testing
+## Local checks
 
-A lightweight syntax check can be run with:
+Run syntax checks:
 
 ```bash
-python -m py_compile app.py
+python -m py_compile app.py narratives.py check_narrative_variants.py
+```
+
+Run the narrative variety check:
+
+```bash
+python check_narrative_variants.py
 ```
