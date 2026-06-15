@@ -102,7 +102,7 @@ def row_to_markdown(contact: pd.Series) -> str:
     return "\n".join(lines)
 
 
-def assess_scientific_relevance(contact: pd.Series) -> ScientificRelevance:
+def assess_scientific_relevance(contact: pd.Series, linkedin_profile_text: str = "") -> ScientificRelevance:
     """Return explicit profile signals that earn scientific relevance claims."""
     evidence: list[str] = []
     for field, value in contact.items():
@@ -113,7 +113,23 @@ def assess_scientific_relevance(contact: pd.Series) -> ScientificRelevance:
             if re.search(pattern, display_value, flags=re.IGNORECASE):
                 evidence.append(f"{label}: {field} = {display_value}")
                 break
+
+    linkedin_profile_text = linkedin_profile_text.strip()
+    if linkedin_profile_text:
+        for label, pattern in SCIENTIFIC_RELEVANCE_PATTERNS:
+            if re.search(pattern, linkedin_profile_text, flags=re.IGNORECASE):
+                evidence.append(f"{label}: LinkedIn Profile Text = {linkedin_profile_text}")
+                break
+
     return ScientificRelevance(bool(evidence), tuple(dict.fromkeys(evidence)))
+
+
+def format_linkedin_profile_context(linkedin_profile_text: str) -> str:
+    """Format pasted LinkedIn profile content for model prompts."""
+    linkedin_profile_text = linkedin_profile_text.strip()
+    if not linkedin_profile_text:
+        return "LinkedIn Profile Text: Not provided"
+    return f"LinkedIn Profile Text:\n{linkedin_profile_text}"
 
 
 def format_scientific_relevance_report(assessment: ScientificRelevance) -> str:
@@ -136,7 +152,7 @@ def attach_scientific_relevance(report: str, assessment: ScientificRelevance) ->
     return f"{format_scientific_relevance_report(assessment)}\n\n{report.strip()}"
 
 
-def build_report_prompt(contact: pd.Series) -> str:
+def build_report_prompt(contact: pd.Series, linkedin_profile_text: str = "") -> str:
     """Create a prompt for Metabolon-focused contact intelligence."""
     return f"""
 Create a concise, reusable contact intelligence report from the structured contact details below.
@@ -145,8 +161,8 @@ Goal:
 Replicate the outreach style used by Andrew Noel at Metabolon. The report should identify the
 contact's scientific or business identity only when directly supported by the contact details.
 
-Use only the contact details provided. Do not use LinkedIn, Outlook, Gmail, web browsing, or any
-external enrichment. Do not claim facts that are not present in the data. If information is missing,
+Use uploaded contact fields and pasted LinkedIn Profile Text. Do not browse LinkedIn or external websites.
+Do not use Outlook, Gmail, web browsing, or any external enrichment. Do not claim facts that are not present in the data. If information is missing,
 say "Not provided" or "Insufficient information."
 
 Do NOT generate psychological profiles, buying signals, strategic risk assessments, personality
@@ -212,6 +228,9 @@ Return markdown with exactly these sections:
 
 Contact details:
 {row_to_markdown(contact)}
+
+Additional contact context:
+{format_linkedin_profile_context(linkedin_profile_text)}
 """.strip()
 
 
@@ -223,13 +242,14 @@ def build_email_prompt(
     fit_reason: str,
     scientific_relevance: ScientificRelevance,
     sender: SenderFields,
+    linkedin_profile_text: str = "",
 ) -> str:
     """Create an Andrew Noel-style outreach email based on a saved report."""
     greeting_name = first_name or "Colleague"
     return f"""
 Generate a credible, personalized Metabolon outreach email using only the contact data and saved
 contact intelligence report below. Write in Andrew Noel style: calm, professional, direct,
-non-salesy, and without hype.
+non-salesy, and without hype. Prioritize evidence from the pasted LinkedIn Profile Text over job title alone.
 
 Sender context:
 {format_sender_context(sender)}
@@ -248,6 +268,9 @@ Relevance discipline:
 
 Contact details:
 {row_to_markdown(contact)}
+
+Additional contact context:
+{format_linkedin_profile_context(linkedin_profile_text)}
 
 Requirements:
 - Output exactly these markdown sections:
@@ -346,10 +369,12 @@ def get_contact_first_name(contact: pd.Series, name_column: str) -> str:
     return name_parts[0] if name_parts else ""
 
 
-def classify_contact_fit(contact: pd.Series, report: str = "") -> tuple[FitLevel, str]:
+def classify_contact_fit(
+    contact: pd.Series, report: str = "", linkedin_profile_text: str = ""
+) -> tuple[FitLevel, str]:
     """Classify outreach fit from explicit contact evidence only."""
-    assessment = assess_scientific_relevance(contact)
-    contact_text = row_to_markdown(contact).lower()
+    assessment = assess_scientific_relevance(contact, linkedin_profile_text)
+    contact_text = f"{row_to_markdown(contact)}\n{linkedin_profile_text}".lower()
     organizational_matches = [keyword for keyword in ORGANIZATIONAL_FIT_KEYWORDS if keyword in contact_text]
 
     if assessment.is_relevant:
@@ -420,6 +445,7 @@ def initialize_session_state() -> None:
         "report_path": "",
         "email": "",
         "email_path": "",
+        "linkedin_profile_text_by_contact": {},
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -475,6 +501,7 @@ def main() -> None:
         st.session_state.contacts = contacts
         st.session_state.uploaded_filename = uploaded_file.name
         st.session_state.selected_contact_index = None
+        st.session_state.linkedin_profile_text_by_contact = {}
         reset_generated_outputs()
         st.success(f"Imported {len(contacts)} contacts into this session.")
 
@@ -527,6 +554,20 @@ def main() -> None:
     )
     st.table(details)
 
+    linkedin_profile_texts: dict[int, str] = st.session_state.linkedin_profile_text_by_contact
+    stored_linkedin_profile_text = linkedin_profile_texts.get(selected_index, "")
+    linkedin_profile_text = st.text_area(
+        "LinkedIn Profile Text",
+        value=stored_linkedin_profile_text,
+        key=f"linkedin_profile_text_{st.session_state.uploaded_filename}_{selected_index}",
+        height=240,
+        placeholder="Paste copied LinkedIn profile content here...",
+        help="Optional. This text is used only as added context for the selected contact during this session.",
+    )
+    if linkedin_profile_text != stored_linkedin_profile_text:
+        linkedin_profile_texts[selected_index] = linkedin_profile_text
+        reset_generated_outputs()
+
     if st.button("Generate reusable intelligence report", type="primary"):
         if not model.strip():
             st.error("Enter an OpenAI model before generating a report.")
@@ -534,8 +575,10 @@ def main() -> None:
 
         with st.spinner("Generating report with OpenAI..."):
             try:
-                scientific_relevance = assess_scientific_relevance(selected_contact)
-                generated_report = generate_text(build_report_prompt(selected_contact), model.strip())
+                scientific_relevance = assess_scientific_relevance(selected_contact, linkedin_profile_text)
+                generated_report = generate_text(
+                    build_report_prompt(selected_contact, linkedin_profile_text), model.strip()
+                )
                 report = attach_scientific_relevance(generated_report, scientific_relevance)
                 report_path = save_markdown(selected_name, report, "report")
             except OpenAIError as exc:
@@ -568,8 +611,10 @@ def main() -> None:
 
             with st.spinner("Generating outreach email with OpenAI..."):
                 try:
-                    scientific_relevance = assess_scientific_relevance(selected_contact)
-                    fit, fit_reason = classify_contact_fit(selected_contact, st.session_state.report)
+                    scientific_relevance = assess_scientific_relevance(selected_contact, linkedin_profile_text)
+                    fit, fit_reason = classify_contact_fit(
+                        selected_contact, st.session_state.report, linkedin_profile_text
+                    )
                     email = generate_text(
                         build_email_prompt(
                             st.session_state.report,
@@ -579,6 +624,7 @@ def main() -> None:
                             fit_reason,
                             scientific_relevance,
                             sender,
+                            linkedin_profile_text,
                         ),
                         model.strip(),
                     )
