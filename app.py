@@ -33,6 +33,8 @@ SCIENTIFIC_FIT_KEYWORDS = (
     "discovery",
     "translational",
     "biomarker",
+    "bioanalytical",
+    "bioanalytics",
     "pharmacology",
     "clinical development",
     "omics",
@@ -49,19 +51,22 @@ SCIENTIFIC_FIT_KEYWORDS = (
     "pharmacodynamic",
 )
 
-ADJACENT_FIT_KEYWORDS = (
-    "pharma",
-    "biotech",
-    "life science",
-    "medical",
-    "regulatory",
-    "operations",
-    "program",
-    "project",
-    "alliance",
-    "business development",
-    "product",
+ORGANIZATIONAL_FIT_KEYWORDS = (
     "portfolio",
+    "operations",
+    "pmo",
+    "project management",
+    "program management",
+    "risk management",
+    "risk",
+    "procurement",
+    "sourcing",
+    "strategy",
+    "strategic",
+    "finance",
+    "financial",
+    "legal",
+    "compliance",
 )
 
 
@@ -194,6 +199,13 @@ Recipient first name for greeting: {greeting_name}
 Fit classification: {fit}
 Reason for fit: {fit_reason}
 
+Relevance discipline:
+- Treat High as direct scientific relevance. This requires clear evidence of discovery, translational,
+  biomarkers, pharmacology, clinical development, omics, disease biology, or bioanalytics work.
+- Treat Medium as organizational relevance only. Examples include portfolio, operations, PMO, risk
+  management, procurement, strategy, finance, or legal.
+- Treat Low as unknown relevance because evidence is insufficient.
+
 Contact details:
 {row_to_markdown(contact)}
 
@@ -214,9 +226,18 @@ Requirements:
 
 Behavior by fit:
 - High: write a specific scientific outreach email grounded in the observed role/focus.
-- Medium: write a cautious introduction; keep the relevance statement broad and careful.
-- Low: write a short general introduction and ask for guidance to the right colleague. Never invent
-  a specialized scientific angle for a low-fit contact.
+- Medium: write an organizational-relevance email only. Briefly introduce Metabolon, state that you
+  noticed the recipient's organizational leadership role, and ask whether they can point you to
+  colleagues closer to translational research, biomarkers, discovery, pharmacology, or clinical
+  development. Do NOT claim Metabolon solves that person's problem. Do NOT infer scientific needs,
+  portfolio decision support, risk reduction, or strategic decision-making benefits.
+- Low: write a very short general introduction only and ask for guidance to the right colleague.
+  Never invent a specialized scientific angle for a low-fit contact.
+
+Forbidden for Medium or Low fit:
+- Do not say Metabolon can support risk management, improve portfolio decisions, reduce development
+  risk, strengthen strategic decision making, improve operations, lower costs, or solve procurement,
+  finance, legal, strategy, PMO, or operational problems.
 
 Preferred email structure:
 Greeting
@@ -225,7 +246,9 @@ My name is [Sender Name], and I support [Account] as [Sender Title] at [Sender C
 
 Given your [role/focus], I thought it could be useful to connect.
 
-One short paragraph explaining the relevant Metabolon capability, adjusted to the fit level.
+For High fit only, one short paragraph explaining the relevant Metabolon scientific capability.
+For Medium fit, do not include a capability claim; ask for guidance to a more scientifically aligned colleague.
+For Low fit, keep the introduction very short and general.
 
 Brief invitation to connect or guidance to the right colleague.
 
@@ -277,28 +300,44 @@ def get_contact_first_name(contact: pd.Series, name_column: str) -> str:
 
 
 def classify_contact_fit(contact: pd.Series, report: str = "") -> tuple[FitLevel, str]:
-    """Classify how clearly a contact fits Metabolon scientific outreach."""
-    combined_text = f"{row_to_markdown(contact)}\n{report}".lower()
-    scientific_matches = [keyword for keyword in SCIENTIFIC_FIT_KEYWORDS if keyword in combined_text]
-    adjacent_matches = [keyword for keyword in ADJACENT_FIT_KEYWORDS if keyword in combined_text]
+    """Classify whether outreach relevance is scientific, organizational, or unknown."""
+    contact_text = row_to_markdown(contact).lower()
+    report_text = report.lower()
+    combined_text = f"{contact_text}\n{report_text}"
+    contact_scientific_matches = [keyword for keyword in SCIENTIFIC_FIT_KEYWORDS if keyword in contact_text]
+    report_scientific_matches = [keyword for keyword in SCIENTIFIC_FIT_KEYWORDS if keyword in report_text]
+    organizational_matches = [keyword for keyword in ORGANIZATIONAL_FIT_KEYWORDS if keyword in contact_text]
 
-    if scientific_matches:
+    if contact_scientific_matches:
         return (
             "High",
-            "Clear Metabolon-relevant scientific or translational signal: "
-            + ", ".join(scientific_matches[:4])
+            "Direct scientific relevance is present in the contact data: "
+            + ", ".join(contact_scientific_matches[:4])
             + ".",
         )
-    if adjacent_matches:
+    if organizational_matches:
         return (
             "Medium",
-            "Pharma/R&D-adjacent signal is present, but the contact data does not clearly show a specific scientific focus: "
-            + ", ".join(adjacent_matches[:4])
+            "Organizational relevance is present, but no direct discovery, translational, biomarker, "
+            "pharmacology, clinical development, omics, disease biology, or bioanalytics role is shown: "
+            + ", ".join(organizational_matches[:4])
             + ".",
+        )
+    if report_scientific_matches and not organizational_matches:
+        return (
+            "High",
+            "Direct scientific relevance is present in the saved report: "
+            + ", ".join(report_scientific_matches[:4])
+            + ".",
+        )
+    if any(keyword in combined_text for keyword in ("pharma", "biotech", "life science", "medical")):
+        return (
+            "Medium",
+            "Only broad organizational or industry relevance is present; no direct scientific role is shown.",
         )
     return (
         "Low",
-        "The provided contact data does not show a clear Metabolon-relevant scientific or translational connection.",
+        "Unknown relevance: the provided contact data has insufficient evidence of direct scientific or organizational relevance.",
     )
 
 
