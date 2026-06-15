@@ -244,12 +244,20 @@ def build_email_prompt(
     sender: SenderFields,
     linkedin_profile_text: str = "",
 ) -> str:
-    """Create an Andrew Noel-style outreach email based on a saved report."""
+    """Create a strict LinkedIn-driven outreach email prompt."""
     greeting_name = first_name or "Colleague"
     return f"""
-Generate a credible, personalized Metabolon outreach email using only the contact data and saved
-contact intelligence report below. Write in Andrew Noel style: calm, professional, direct,
-non-salesy, and without hype. Prioritize evidence from the pasted LinkedIn Profile Text over job title alone.
+Input:
+- Contact metadata
+- Full LinkedIn profile content
+- Optional LinkedIn posts/activity
+- Optional company/account context
+
+Task:
+Generate a highly personalized B2B life-sciences outreach email for Metabolon.
+
+Critical principle:
+The email must be driven by the prospect's LinkedIn content, not by a generic Metabolon pitch.
 
 Sender context:
 {format_sender_context(sender)}
@@ -269,63 +277,82 @@ Relevance discipline:
 Contact details:
 {row_to_markdown(contact)}
 
-Additional contact context:
+Full LinkedIn profile content and optional LinkedIn posts/activity:
 {format_linkedin_profile_context(linkedin_profile_text)}
 
-Requirements:
-- Output exactly these markdown sections:
-  1. Fit Classification
-  2. Reason for Fit
-  3. Scientific Relevance
-  4. Evidence
-  5. Generated Outreach Email
-- The Generated Outreach Email must sound like a thoughtful human reaching out to another
-  professional.
-- The email body must be 120 words or fewer.
-- The email body must be 6 sentences or fewer.
-- Start with the recipient, never with Metabolon.
-- Mention one specific aspect of the person's role, career, responsibility, or background.
-- Do not flatter, praise, or use marketing language.
-- Do not describe Metabolon for more than one sentence.
-- Avoid broad claims.
-- Do not mention LinkedIn, Outlook, Gmail, external enrichment, or unavailable facts.
-- Do not use these words or phrases in the email: "capabilities", "solutions", "platform",
-  "precision medicine", "support your efforts", "align with objectives", "value", "leverage",
-  "synergy", "discussion", "I hope this message finds you well", "transformational",
-  "revolutionary", "game-changing", "game changing", "save millions", "maximize value".
-- Do not infer portfolio risk reduction, strategic risk management benefits, commercial value,
-  cost savings, or decision-grade evidence unless those facts are explicitly present in the data.
-- Sign off with {sender['name']} and {sender['title']} without adding extra claims.
-
-Email structure:
-1. Sentence 1: Specific observation about the person.
-2. Sentence 2: A real problem or question relevant to that role.
-3. Sentence 3: One sentence about how metabolomics can sometimes help illuminate that problem.
-4. Sentence 4: Why I thought of them specifically.
-5. Sentence 5: Simple meeting request; do not use the word "discussion".
-6. Sentence 6: Redirect request if someone else owns the topic.
-
-Scientific relevance handling:
-- If Scientific Relevance is TRUE, ground the email only in exact evidence listed above.
-- If Scientific Relevance is FALSE, do not propose a specific Metabolon use case and do not infer
-  scientific needs. Keep the note to referral discovery using the same six-sentence structure.
-- When Scientific Relevance is FALSE, the redirect request should ask who owns translational
-  research, biomarkers, discovery, pharmacology, clinical development, or omics activities.
-
-Forbidden when Scientific Relevance is FALSE:
-- Do not propose a specific Metabolon use case.
-- Do not mention pathway biology, disease biology, translational research needs, biomarker needs,
-  pharmacology support, clinical development support, portfolio decision support, risk reduction,
-  strategic decision making, risk evaluation, or portfolio decisions.
-- Do not say Metabolon can support risk management, improve portfolio decisions, reduce development
-  risk, strengthen strategic decision making, improve operations, lower costs, or solve procurement,
-  finance, legal, strategy, PMO, or operational problems.
-
-Before finalizing the email, silently ask: "Would a senior pharma executive believe this was
-personally written?" If the answer is no, rewrite automatically before returning the final output.
-
+Optional company/account context:
 Saved intelligence report:
 {report}
+
+Step 1: Extract the strongest usable hook from LinkedIn.
+Choose only one hook. It must be concrete and visible in the LinkedIn content:
+- current role responsibility
+- career transition
+- therapeutic area
+- biomarker/research focus
+- clinical development responsibility
+- regulated bioanalysis responsibility
+- translational science focus
+- assay/lab/automation responsibility
+- publication/post/topic/activity
+
+If no concrete hook exists, use the job role honestly. Do not invent.
+
+Step 2: Build the email around this sequence:
+1. Dear FirstName,
+2. Concrete observation from LinkedIn.
+3. Real question/problem naturally connected to that observation.
+4. One restrained Metabolon/metabolomics bridge.
+5. Simple 20-minute Teams ask.
+6. Redirect sentence if they are not the right person.
+
+Hard rules:
+- 90-130 words.
+- Maximum 6 sentences.
+- Always start with "Dear {greeting_name},"
+- Never start with "My name is..."
+- Never start with Metabolon.
+- Do not flatter.
+- Do not say "impressive", "extensive leadership", "your work stands out", or similar praise.
+- Do not use generic challenges unless directly tied to the LinkedIn hook.
+- Do not use corporate/vendor language.
+- Do not mention Outlook, Gmail, external enrichment, or unavailable facts.
+- Forbidden terms:
+  capabilities
+  platform
+  solution
+  leverage
+  align
+  synergy
+  value proposition
+  precision medicine
+  support your efforts
+  support your objectives
+  complement your efforts
+  discuss further
+  actionable insights
+  complex therapeutic areas
+  robust scalable
+  scientific insights
+
+Metabolon sentence rule:
+Metabolon may appear in only one sentence.
+That sentence must be modest and specific, for example:
+"At Metabolon, we sometimes see metabolomics help clarify pathway activity or biological response when conventional biomarker readouts leave open questions."
+
+Quality gate:
+Before returning the email, silently check:
+1. Could this email be sent to 100 other people unchanged?
+2. Does it sound like a vendor template?
+3. Is the LinkedIn hook vague?
+4. Does the pitch arrive before the recipient's world is established?
+
+If yes to any, rewrite once.
+
+Output only:
+Subject:
+Email:
+
 """.strip()
 
 
