@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import random
+from email import message_from_bytes
+from io import BytesIO
+from zipfile import ZipFile
 
 import pandas as pd
 
 from app import build_email, classify_persona
+from draft_exports import EMLDraftProvider, SENDER_NOT_CONFIGURED_NOTE
 from narratives import NARRATIVE_LIBRARY, PERSONAS
 
 FORBIDDEN_EMAIL_TEXT = (
@@ -33,8 +37,10 @@ def main() -> None:
         narrative_set = NARRATIVE_LIBRARY[persona]
         if len(narrative_set["subjects"]) != 10:
             raise AssertionError(f"{persona} must have 10 subject lines")
-        if len(narrative_set["narratives"]) != 10:
-            raise AssertionError(f"{persona} must have 10 narratives")
+        if len(narrative_set["use_cases"]) != 10:
+            raise AssertionError(f"{persona} must have 10 use cases")
+        if len(narrative_set["benefits"]) != 3:
+            raise AssertionError(f"{persona} must have 3 benefits")
 
     for contact in contacts:
         for phrase in FORBIDDEN_EMAIL_TEXT:
@@ -73,8 +79,8 @@ def main() -> None:
         "Jordan Example",
         "ExampleCo",
         operations_classification.persona,
-        operations_classification.confidence_score,
-        operations_classification.matched_keyword,
+        persona_confidence_score=operations_classification.confidence_score,
+        matched_keyword=operations_classification.matched_keyword,
     )
     if operations_email.email != "Review manually":
         raise AssertionError("Operations contacts must be marked for manual review")
@@ -83,6 +89,36 @@ def main() -> None:
     pharmacology_classification = classify_persona(pharmacology_contact, ["Title"])
     if pharmacology_classification.persona != "Clinical Pharmacology":
         raise AssertionError("Clinical Pharmacology should use its dedicated persona")
+
+    sample_email = build_email("Taylor Example", "ExampleCo", "Discovery").email
+    required_lines = (
+        "My name is Helmut von Keyserling, and I support ExampleCo as Strategic Account Manager at Metabolon.",
+        "Many discovery teams are using metabolomics to ",
+        "This type of data can help:",
+        "Metabolon generates deep quantitative metabolomics datasets that help discovery teams interpret functional biology beyond traditional assays/readouts.",
+        "If this is of interest, I would be happy to briefly introduce our approach and learn how your team is thinking about this area.",
+    )
+    for required_line in required_lines:
+        if required_line not in sample_email:
+            raise AssertionError(f"Missing required email text: {required_line!r}")
+
+    draft_rows = pd.DataFrame(
+        [{"To": "recipient@example.com", "Subject": "Subject", "Body": sample_email}]
+    )
+    unset_zip = EMLDraftProvider(sender_email="").export(draft_rows)
+    with ZipFile(BytesIO(unset_zip)) as archive:
+        unset_message = message_from_bytes(archive.read("contact_001.eml"))
+    if unset_message.get("From") is not None:
+        raise AssertionError("EML must not set From when sender is not configured")
+    if SENDER_NOT_CONFIGURED_NOTE not in unset_message.get_payload(decode=True).decode():
+        raise AssertionError("EML must include sender selection note when unset")
+
+    configured_zip = EMLDraftProvider(sender_email="configured").export(draft_rows)
+    with ZipFile(BytesIO(configured_zip)) as archive:
+        configured_message = message_from_bytes(archive.read("contact_001.eml"))
+    expected_from = "Helmut von Keyserling <helmut.vonkeyserling@metabolon.com>"
+    if configured_message.get("From") != expected_from:
+        raise AssertionError("EML must set Helmut as From when sender is configured")
 
     print(f"Generated 20 emails with {len(variant_ids)} narrative_variant_id values.")
 
