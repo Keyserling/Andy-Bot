@@ -16,7 +16,7 @@ from typing import Any, NamedTuple
 import pandas as pd
 import streamlit as st
 
-from narratives import PERSONAS, get_narrative_set
+from narratives import get_narrative_set
 
 
 OLD_TO_NEW_PERSONA = {
@@ -24,12 +24,90 @@ OLD_TO_NEW_PERSONA = {
     "Clinical Development": "Translational / Clinical Development",
     "Clinical Biomarkers": "Biomarkers / Bioanalysis",
     "Bioanalysis": "Biomarkers / Bioanalysis",
+    "Clinical Pharmacology": "Biomarkers / Bioanalysis",
     "Safety/Risk": "Safety / Quality",
     "Immunology": "Discovery",
     "Computational Biology": "Discovery",
 }
 
 PERSONA_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "Clinical Biomarkers",
+        (
+            "biomarker",
+            "bioanalysis",
+            "bioanalytical",
+            "assay",
+            "translational biomarker",
+            "biomarker strategy",
+        ),
+    ),
+    (
+        "Computational Biology",
+        (
+            "computational",
+            "ai",
+            "in silico",
+            "drug discovery",
+            "modeling",
+            "modelling",
+            "cheminformatics",
+            "bioinformatics",
+            "data science",
+            "systems biology",
+        ),
+    ),
+    (
+        "Discovery",
+        (
+            "discovery",
+            "principal scientist",
+            "lab head",
+            "screening",
+            "target identification",
+            "target discovery",
+            "early research",
+            "research scientist",
+            "biology",
+            "multiomics",
+            "multi-omics",
+        ),
+    ),
+    (
+        "Clinical Pharmacology",
+        (
+            "clinical pharmacology",
+            "pk/pd",
+            "pharmacokinetic",
+            "pharmacodynamic",
+            "dmpk",
+        ),
+    ),
+    (
+        "Medical Affairs",
+        ("medical affairs",),
+    ),
+    (
+        "Immunology",
+        (
+            "immunology",
+            "autoimmune",
+            "inflammation",
+            "immune",
+        ),
+    ),
+    (
+        "Oncology",
+        (
+            "oncology",
+            "hematology-oncology",
+            "haematology-oncology",
+            "cancer",
+            "tumor",
+            "tumour",
+            "immuno-oncology",
+        ),
+    ),
     (
         "Safety / Quality",
         (
@@ -42,36 +120,6 @@ PERSONA_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "benefit risk",
             "toxicology",
             "toxicity",
-        ),
-    ),
-    (
-        "Medical Affairs",
-        (
-            "medical affairs",
-            "medical science liaison",
-            "msl",
-            "field medical",
-            "medical director",
-            "scientific affairs",
-        ),
-    ),
-    (
-        "Biomarkers / Bioanalysis",
-        (
-            "clinical biomarker",
-            "biomarker",
-            "patient stratification",
-            "companion diagnostic",
-            "diagnostic",
-            "pharmacodynamic biomarker",
-            "bioanalysis",
-            "bioanalytical",
-            "dmpk",
-            "pk/pd",
-            "pharmacokinetic",
-            "pharmacodynamic",
-            "assay",
-            "regulated bioanalysis",
         ),
     ),
     (
@@ -90,32 +138,6 @@ PERSONA_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "human biology",
         ),
     ),
-    (
-        "Oncology",
-        ("oncology", "cancer", "tumor", "tumour", "immuno-oncology", "io research"),
-    ),
-    (
-        "Discovery",
-        (
-            "discovery",
-            "drug discovery",
-            "target discovery",
-            "early research",
-            "research scientist",
-            "principal scientist",
-            "biology",
-            "immunology",
-            "inflammation",
-            "autoimmune",
-            "immune",
-            "computational biology",
-            "bioinformatics",
-            "data science",
-            "systems biology",
-            "multiomics",
-            "multi-omics",
-        ),
-    ),
 )
 
 
@@ -124,12 +146,20 @@ def map_persona(persona: str) -> str:
     return OLD_TO_NEW_PERSONA.get(persona, persona)
 
 
+class PersonaClassification(NamedTuple):
+    """Persona classification and confidence for one contact."""
+
+    persona: str
+    confidence_score: float
+
+
 class ContactOutreach(NamedTuple):
     """Generated outreach output for one contact."""
 
     name: str
     company: str
     persona: str
+    persona_confidence_score: float
     subject: str
     email: str
     narrative_variant_id: str
@@ -226,8 +256,22 @@ def row_to_text(contact: pd.Series, columns: list[str] | None = None) -> str:
     return "\n".join(lines) or "Not provided"
 
 
-def identify_persona(contact: pd.Series, role_columns: list[str]) -> str:
-    """Classify a contact into exactly one persona template."""
+def pattern_matches(search_text: str, pattern: str) -> bool:
+    """Return whether a persona pattern appears as a phrase or acronym."""
+    pattern_regex = rf"(?<![A-Za-z0-9]){re.escape(pattern)}(?![A-Za-z0-9])"
+    return re.search(pattern_regex, search_text) is not None
+
+
+def persona_confidence(match_count: int, role_match_count: int) -> float:
+    """Convert match counts into a conservative persona confidence score."""
+    if match_count == 0:
+        return 0.35
+    score = 0.64 + min(match_count, 3) * 0.08 + min(role_match_count, 2) * 0.06
+    return round(min(score, 0.98), 2)
+
+
+def classify_persona(contact: pd.Series, role_columns: list[str]) -> PersonaClassification:
+    """Classify a contact into one explicit persona and return confidence."""
     role_text = " ".join(
         str(contact.get(column, ""))
         for column in role_columns
@@ -237,15 +281,29 @@ def identify_persona(contact: pd.Series, role_columns: list[str]) -> str:
     search_text = f"{role_text} {all_text}"
 
     for persona, patterns in PERSONA_PATTERNS:
-        if any(pattern in search_text for pattern in patterns):
-            return map_persona(persona)
-    return "Discovery"
+        role_match_count = sum(
+            1 for pattern in patterns if pattern_matches(role_text, pattern)
+        )
+        all_match_count = sum(
+            1 for pattern in patterns if pattern_matches(search_text, pattern)
+        )
+        if all_match_count:
+            return PersonaClassification(
+                persona, persona_confidence(all_match_count, role_match_count)
+            )
+    return PersonaClassification("Discovery", persona_confidence(0, 0))
+
+
+def identify_persona(contact: pd.Series, role_columns: list[str]) -> str:
+    """Classify a contact into one explicit persona label."""
+    return classify_persona(contact, role_columns).persona
 
 
 def build_email(
     name: str,
     company: str,
     persona: str,
+    persona_confidence_score: float = 0.35,
     used_emails: set[str] | None = None,
 ) -> ContactOutreach:
     """Build outreach from one random subject and one random narrative."""
@@ -277,7 +335,13 @@ def build_email(
                 used_emails.add(email)
                 variant_id = f"{active_persona}-{narrative_index:02d}-S{subject_index:02d}"
                 return ContactOutreach(
-                    name, company, active_persona, subject, email, variant_id
+                    name,
+                    company,
+                    persona,
+                    persona_confidence_score,
+                    subject,
+                    email,
+                    variant_id,
                 )
 
     raise ValueError(
@@ -311,6 +375,7 @@ def empty_output_table() -> pd.DataFrame:
             "Name",
             "Company",
             "Persona",
+            "Persona Confidence Score",
             "Subject",
             "Email",
             "narrative_variant_id",
@@ -345,8 +410,16 @@ def generate_outreach_table(contacts: pd.DataFrame) -> pd.DataFrame:
     for position, (_, contact) in enumerate(contacts.iterrows(), start=1):
         name = get_cell_value(contact, name_column, "Unnamed Contact")
         company = get_cell_value(contact, company_column, "")
-        persona = identify_persona(contact, role_columns)
-        rows.append(build_email(name, company, persona, used_emails))
+        classification = classify_persona(contact, role_columns)
+        rows.append(
+            build_email(
+                name,
+                company,
+                classification.persona,
+                classification.confidence_score,
+                used_emails,
+            )
+        )
         progress.progress(
             position / total_contacts,
             text=f"Generated {position} of {total_contacts} emails",
@@ -359,6 +432,7 @@ def generate_outreach_table(contacts: pd.DataFrame) -> pd.DataFrame:
             "Name",
             "Company",
             "Persona",
+            "Persona Confidence Score",
             "Subject",
             "Email",
             "narrative_variant_id",
@@ -378,7 +452,7 @@ def main() -> None:
     with st.sidebar:
         st.header("Settings")
         st.markdown("**Personas**")
-        st.write(", ".join(PERSONAS))
+        st.write(", ".join(persona for persona, _ in PERSONA_PATTERNS))
 
     uploaded_file = st.file_uploader(
         "Upload contacts file (.csv, .xls, .xlsx)", type=["csv", "xls", "xlsx"]
