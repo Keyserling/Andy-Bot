@@ -178,6 +178,15 @@ class PersonaClassification(NamedTuple):
     matched_keyword: str
 
 
+class ContactIntegrity(NamedTuple):
+    """Contact-data integrity validation details for one contact."""
+
+    status: str
+    reason: str
+    suggested_company: str
+    suggested_title: str
+
+
 class ContactOutreach(NamedTuple):
     """Generated outreach output for one contact."""
 
@@ -186,6 +195,10 @@ class ContactOutreach(NamedTuple):
     to: str
     persona: str
     persona_confidence_score: float
+    integrity_status: str
+    integrity_reason: str
+    suggested_company: str
+    suggested_title: str
     subject: str
     email: str
     matched_keyword: str
@@ -257,6 +270,41 @@ def find_email_column(dataframe: pd.DataFrame) -> str | None:
     )
 
 
+def find_linkedin_company_column(dataframe: pd.DataFrame) -> str | None:
+    """Find the most likely LinkedIn current-company column."""
+    return find_column(
+        dataframe,
+        (
+            "linkedin current company",
+            "linkedin_current_company",
+            "linkedin company",
+            "linkedin_company",
+            "current company",
+            "current_company",
+            "current employer",
+            "current_employer",
+        ),
+    )
+
+
+def find_linkedin_title_column(dataframe: pd.DataFrame) -> str | None:
+    """Find the most likely LinkedIn current-title column."""
+    return find_column(
+        dataframe,
+        (
+            "linkedin current title",
+            "linkedin_current_title",
+            "linkedin title",
+            "linkedin_title",
+            "current title",
+            "current_title",
+            "title",
+            "job title",
+            "job_title",
+        ),
+    )
+
+
 def find_role_columns(dataframe: pd.DataFrame) -> list[str]:
     """Find title and role columns that should drive persona selection."""
     role_terms = ("title", "role", "position", "job", "function", "department")
@@ -314,6 +362,160 @@ def get_contact_first_name(name: str, source_first_name: str = "") -> str:
         return name_parts[0]
 
     return "Colleague"
+
+
+FREE_EMAIL_DOMAINS = {
+    "gmail.com",
+    "yahoo.com",
+    "hotmail.com",
+    "outlook.com",
+    "icloud.com",
+    "aol.com",
+    "proton.me",
+    "protonmail.com",
+}
+
+COMPANY_SUFFIXES = (
+    "incorporated",
+    "inc",
+    "limited",
+    "ltd",
+    "llc",
+    "plc",
+    "corp",
+    "corporation",
+    "company",
+    "co",
+    "group",
+    "ag",
+    "gmbh",
+    "sa",
+    "bv",
+)
+
+
+def extract_email_domain(email: str) -> str:
+    """Return a normalized domain from an email address, or an empty string."""
+    match = re.search(r"[A-Z0-9._%+-]+@([A-Z0-9.-]+\.[A-Z]{2,})", email, re.I)
+    return match.group(1).lower() if match else ""
+
+
+def normalize_company_name(company: str) -> str:
+    """Normalize company names and domains for integrity comparisons."""
+    normalized = re.sub(r"[^a-z0-9]+", " ", company.lower()).strip()
+    tokens = [token for token in normalized.split() if token not in COMPANY_SUFFIXES]
+    return " ".join(tokens)
+
+
+def company_matches_domain(company: str, domain: str) -> bool:
+    """Return whether a company name appears to match an email domain."""
+    if not company or not domain or domain in FREE_EMAIL_DOMAINS:
+        return False
+    company_key = normalize_company_name(company).replace(" ", "")
+    domain_key = normalize_company_name(domain.split(".")[0]).replace(" ", "")
+    return bool(
+        company_key
+        and domain_key
+        and (company_key in domain_key or domain_key in company_key)
+    )
+
+
+def company_matches_company(company: str, linkedin_company: str) -> bool:
+    """Return whether the uploaded company and LinkedIn company match."""
+    company_key = normalize_company_name(company).replace(" ", "")
+    linkedin_key = normalize_company_name(linkedin_company).replace(" ", "")
+    return bool(
+        company_key
+        and linkedin_key
+        and (company_key in linkedin_key or linkedin_key in company_key)
+    )
+
+
+def has_multiple_current_employers(linkedin_company: str) -> bool:
+    """Detect obvious multiple-current-employer LinkedIn values."""
+    return bool(re.search(r"\b(and|/)\b|;|,", linkedin_company, re.I))
+
+
+def has_recent_employer_change(linkedin_title: str) -> bool:
+    """Detect obvious recent employer-change signals in current-title text."""
+    return bool(
+        re.search(
+            r"\b(recent|new role|joined|formerly|previously|ex-)\b",
+            linkedin_title,
+            re.I,
+        )
+    )
+
+
+def validate_contact_integrity(
+    company: str, email: str, linkedin_company: str = "", linkedin_title: str = ""
+) -> ContactIntegrity:
+    """Validate contact/company consistency before email generation."""
+    domain = extract_email_domain(email)
+    email_matches = company_matches_domain(company, domain)
+    linkedin_matches = company_matches_company(company, linkedin_company)
+    email_known = bool(domain and domain not in FREE_EMAIL_DOMAINS)
+    linkedin_known = bool(linkedin_company)
+
+    if has_multiple_current_employers(linkedin_company):
+        return ContactIntegrity(
+            "RED", "Multiple current employers detected.", "", linkedin_title
+        )
+    if has_recent_employer_change(linkedin_title):
+        return ContactIntegrity(
+            "RED", "Recent employer change detected.", linkedin_company, linkedin_title
+        )
+
+    if email_known and linkedin_known and not email_matches and not linkedin_matches:
+        suggested_company = linkedin_company or domain.split(".")[0].title()
+        return ContactIntegrity(
+            "RED",
+            f"Company mismatch. Email and LinkedIn indicate {suggested_company}.",
+            suggested_company,
+            linkedin_title,
+        )
+    if email_known and not email_matches and not linkedin_known:
+        return ContactIntegrity(
+            "RED",
+            "Email domain conflicts with company.",
+            domain.split(".")[0].title(),
+            linkedin_title,
+        )
+    if email_matches and linkedin_known and not linkedin_matches:
+        return ContactIntegrity(
+            "RED",
+            "LinkedIn company conflicts with company.",
+            linkedin_company,
+            linkedin_title,
+        )
+    if email_matches and linkedin_matches:
+        return ContactIntegrity(
+            "GREEN",
+            "Company, email domain, and LinkedIn company align.",
+            company,
+            linkedin_title,
+        )
+
+    if email_matches and not linkedin_known:
+        return ContactIntegrity(
+            "YELLOW",
+            "Missing LinkedIn company; company cannot be fully confirmed.",
+            company,
+            linkedin_title,
+        )
+    if linkedin_matches and not email_known:
+        return ContactIntegrity(
+            "YELLOW",
+            "Email domain missing or unconfirmed; LinkedIn company matches.",
+            company,
+            linkedin_title,
+        )
+    return ContactIntegrity(
+        "YELLOW",
+        "Cannot verify current employer.",
+        linkedin_company or company,
+        linkedin_title,
+    )
 
 
 def row_to_text(contact: pd.Series, columns: list[str] | None = None) -> str:
@@ -387,10 +589,30 @@ def build_email(
     matched_keyword: str = "",
     source_first_name: str = "",
     used_emails: set[str] | None = None,
+    integrity: ContactIntegrity | None = None,
 ) -> ContactOutreach:
     """Build outreach from one random subject and one persona-specific use case."""
+    integrity = integrity or ContactIntegrity(
+        "YELLOW", "Company cannot be confirmed.", company, ""
+    )
     first_name = get_contact_first_name(name, source_first_name)
     company_text = company or "your organization"
+    if integrity.status == "RED":
+        return ContactOutreach(
+            name,
+            company,
+            to,
+            persona,
+            persona_confidence_score,
+            integrity.status,
+            integrity.reason,
+            integrity.suggested_company,
+            integrity.suggested_title,
+            "Review Required",
+            "Review Required",
+            matched_keyword,
+            "REVIEW-REQUIRED",
+        )
     active_persona = map_persona(persona)
     if active_persona == "Operations / Low Priority":
         return ContactOutreach(
@@ -399,6 +621,10 @@ def build_email(
             to,
             active_persona,
             persona_confidence_score,
+            integrity.status,
+            integrity.reason,
+            integrity.suggested_company,
+            integrity.suggested_title,
             "Review manually",
             "Review manually",
             matched_keyword,
@@ -436,13 +662,19 @@ def build_email(
             )
             if email not in used_emails:
                 used_emails.add(email)
-                variant_id = f"{active_persona}-{use_case_index:02d}-S{subject_index:02d}"
+                variant_id = (
+                    f"{active_persona}-{use_case_index:02d}-S{subject_index:02d}"
+                )
                 return ContactOutreach(
                     name,
                     company,
                     to,
                     persona,
                     persona_confidence_score,
+                    integrity.status,
+                    integrity.reason,
+                    integrity.suggested_company,
+                    integrity.suggested_title,
                     subject,
                     email,
                     matched_keyword,
@@ -482,6 +714,10 @@ def empty_output_table() -> pd.DataFrame:
             "To",
             "Persona",
             "Persona Confidence Score",
+            "Integrity Status",
+            "Integrity Reason",
+            "Suggested Company",
+            "Suggested Title",
             "Subject",
             "Email",
             "Matched Keyword",
@@ -511,11 +747,16 @@ def generate_outreach_table(contacts: pd.DataFrame) -> pd.DataFrame:
 
     company_column = find_company_column(contacts)
     email_column = find_email_column(contacts)
+    linkedin_company_column = find_linkedin_company_column(contacts)
+    linkedin_title_column = find_linkedin_title_column(contacts)
     first_name_column = find_first_name_column(contacts)
     role_columns = find_role_columns(contacts)
     rows: list[ContactOutreach] = []
     used_emails: set[str] = set()
-    progress = st.progress(0, text="Classifying contacts and generating emails...")
+    progress = st.progress(
+        0,
+        text="Validating contact integrity, classifying contacts, and generating emails...",
+    )
 
     total_contacts = len(contacts)
     for position, (_, contact) in enumerate(contacts.iterrows(), start=1):
@@ -523,6 +764,11 @@ def generate_outreach_table(contacts: pd.DataFrame) -> pd.DataFrame:
         company = get_cell_value(contact, company_column, "")
         to = get_cell_value(contact, email_column, "")
         source_first_name = get_cell_value(contact, first_name_column, "")
+        linkedin_company = get_cell_value(contact, linkedin_company_column, "")
+        linkedin_title = get_cell_value(contact, linkedin_title_column, "")
+        integrity = validate_contact_integrity(
+            company, to, linkedin_company, linkedin_title
+        )
         classification = classify_persona(contact, role_columns)
         rows.append(
             build_email(
@@ -534,6 +780,7 @@ def generate_outreach_table(contacts: pd.DataFrame) -> pd.DataFrame:
                 classification.matched_keyword,
                 source_first_name,
                 used_emails,
+                integrity,
             )
         )
         progress.progress(
@@ -550,6 +797,10 @@ def generate_outreach_table(contacts: pd.DataFrame) -> pd.DataFrame:
             "To",
             "Persona",
             "Persona Confidence Score",
+            "Integrity Status",
+            "Integrity Reason",
+            "Suggested Company",
+            "Suggested Title",
             "Subject",
             "Email",
             "Matched Keyword",
@@ -560,9 +811,9 @@ def generate_outreach_table(contacts: pd.DataFrame) -> pd.DataFrame:
 
 def build_draft_table(generated_emails: pd.DataFrame) -> pd.DataFrame:
     """Convert generated outreach rows into draft export rows."""
-    return generated_emails.rename(
-        columns={"Email": "Body"}
-    )[["To", "Subject", "Body"]].copy()
+    return generated_emails.rename(columns={"Email": "Body"})[
+        ["To", "Subject", "Body"]
+    ].copy()
 
 
 def build_outlook_draft_exports(generated_emails: pd.DataFrame) -> tuple[bytes, bytes]:
@@ -641,6 +892,21 @@ def main() -> None:
         st.subheader("Processing Summary")
         summary_table = st.session_state.generated_emails
         st.write(f"Contacts processed: {len(summary_table)}")
+        st.write("Contact integrity")
+        integrity_counts = summary_table["Integrity Status"].value_counts()
+        green_contacts = int(integrity_counts.get("GREEN", 0))
+        yellow_contacts = int(integrity_counts.get("YELLOW", 0))
+        red_contacts = int(integrity_counts.get("RED", 0))
+        col_green, col_yellow, col_red = st.columns(3)
+        col_green.metric("GREEN contacts", green_contacts)
+        col_yellow.metric("YELLOW contacts", yellow_contacts)
+        col_red.metric("RED contacts", red_contacts)
+        if yellow_contacts:
+            st.warning("YELLOW contacts will generate email with a warning.")
+        if red_contacts:
+            st.error(
+                'RED contacts are marked "Review Required" and emails are not generated.'
+            )
         st.write("Persona distribution")
         st.dataframe(
             summary_table["Persona"]
