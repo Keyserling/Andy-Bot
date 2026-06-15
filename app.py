@@ -58,20 +58,70 @@ def row_to_markdown(contact: pd.Series) -> str:
 
 
 def build_report_prompt(contact: pd.Series) -> str:
-    """Create a compact prompt for a basic contact intelligence report."""
+    """Create a prompt for Metabolon-focused contact intelligence."""
     return f"""
 Create a concise, reusable contact intelligence report from the structured contact details below.
 
-Do not claim facts that are not present in the data. Do not use LinkedIn, Outlook, Gmail,
-web browsing, or any external enrichment. If information is missing, say so.
+Goal:
+Replicate the outreach style used by Andrew Noel at Metabolon. The report should identify the
+contact's scientific or business identity and select the most relevant Metabolon conversation.
 
-Return markdown with these sections:
-1. Executive Summary
-2. Known Contact Details
-3. Relationship / Outreach Signals
-4. Suggested Talking Points
-5. Follow-up Questions
-6. Data Gaps
+Use only the contact details provided. Do not use LinkedIn, Outlook, Gmail, web browsing, or any
+external enrichment. Do not claim facts that are not present in the data. If information is missing,
+say "Not provided" or "Insufficient information."
+
+Do NOT generate psychological profiles, buying signals, strategic risk assessments, personality
+analyses, or speculative business conclusions.
+
+Extract and return:
+- Current role
+- Seniority level
+- Company
+- Functional area
+- Therapeutic area(s)
+- Top 10-20 recurring keywords
+- Scientific/business themes
+- Likely Metabolon-relevant interests
+- Recommended outreach angle
+
+Assign exactly one primary persona from this list:
+- Discovery Research
+- Translational Research
+- Biomarkers
+- Clinical Development
+- Bioanalytical Sciences
+- Pharmacology
+- Portfolio Strategy
+- Immunology
+- Oncology
+- Respiratory
+- Metabolism
+- Neuroscience
+- Infectious Disease
+- Other
+
+Select exactly one recommended outreach angle from this list:
+- Mechanism of Action
+- Translational Biomarkers
+- Pharmacodynamic Biomarkers
+- Pathway Biology
+- Host Response Biology
+- Metabolic Phenotyping
+- Patient Stratification
+- Quantitative Biology
+- Clinical Biomarkers
+- Discovery Research Support
+- Portfolio Decision Support
+
+Clearly separate observed facts from inferred themes. Inferences must be conservative and directly
+grounded in the provided contact data. Do not invent interests or priorities.
+
+Return markdown with exactly these sections:
+1. Intelligence Report
+   - Observed Facts
+   - Inferred Themes
+   - Primary Persona
+   - Recommended Outreach Angle
 
 Contact details:
 {row_to_markdown(contact)}
@@ -79,17 +129,41 @@ Contact details:
 
 
 def build_email_prompt(report: str) -> str:
-    """Create a prompt for an outreach email based on a saved report."""
+    """Create an Andrew Noel-style outreach email based on a saved report."""
     return f"""
-Write a concise, professional outreach email using only the saved contact intelligence report below.
+Generate an outreach email in Andrew Noel's Metabolon style using only the saved contact
+intelligence report below.
 
-Do not mention unavailable facts, LinkedIn research, Outlook, Gmail, or external enrichment.
-Keep the email warm, specific to the available data, and easy to customize.
+Requirements:
+- 80-150 words
+- Professional and concise
+- Mention exactly one relevant observation about the contact's role, focus, or expertise
+- Mention one Metabolon capability that matches that focus
+- Avoid hype
+- Avoid exaggerated claims
+- Avoid generic sales language
+- Avoid these phrases: "strategic risk management", "transformational", "revolutionary",
+  "game changing", "save millions", "maximize value"
+- Do not invent interests or priorities
+- If insufficient information exists, say less rather than hallucinating
+- Do not mention unavailable facts, LinkedIn research, Outlook, Gmail, or external enrichment
 
-Return markdown with these sections:
-1. Subject
-2. Email Body
-3. Personalization Notes
+Preferred email structure:
+Greeting
+
+Short introduction:
+"I support [Company] as Strategic Account Manager at Metabolon."
+
+One sentence referencing the recipient's area of focus.
+
+One short paragraph describing the most relevant Metabolon capability.
+
+One sentence inviting a brief conversation.
+
+Professional sign-off.
+
+Return markdown with exactly these sections:
+1. Outreach Email
 
 Saved intelligence report:
 {report}
