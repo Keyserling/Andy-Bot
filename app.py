@@ -279,33 +279,38 @@ Requirements:
   3. Scientific Relevance
   4. Evidence
   5. Generated Outreach Email
-- The email body must be 80-150 words.
-- Write like an experienced Strategic Account Manager introducing a scientifically relevant
-  capability. The sender is a commercial professional, not a scientist or professor.
-- The goal is to start a credible business conversation, not to teach science.
-- The tone must be commercially aware, scientifically literate, professional, concise,
-  confident, and non-salesy.
-- The reader should feel the sender understands their area and may be worth speaking with.
-- Avoid language that sounds like a marketing email or an academic discussion.
-- Start with "Good morning {greeting_name}," or "Dear {greeting_name},". Never start with "Hello," alone.
-- Include this introduction concept without hardcoding anyone else: "My name is {sender['name']}, and I support {sender['account']} as {sender['title']} at {sender['company']}."
-- Sign off with {sender['name']} and {sender['title']}.
+- The Generated Outreach Email must sound like a thoughtful human reaching out to another
+  professional.
+- The email body must be 120 words or fewer.
+- The email body must be 6 sentences or fewer.
+- Start with the recipient, never with Metabolon.
+- Mention one specific aspect of the person's role, career, responsibility, or background.
+- Do not flatter, praise, or use marketing language.
+- Do not describe Metabolon for more than one sentence.
+- Avoid broad claims.
 - Do not mention LinkedIn, Outlook, Gmail, external enrichment, or unavailable facts.
-- Do not use: "I hope this message finds you well", "transformational", "revolutionary",
-  "game-changing", "game changing", "save millions", "maximize value".
+- Do not use these words or phrases in the email: "capabilities", "solutions", "platform",
+  "precision medicine", "support your efforts", "align with objectives", "value", "leverage",
+  "synergy", "discussion", "I hope this message finds you well", "transformational",
+  "revolutionary", "game-changing", "game changing", "save millions", "maximize value".
 - Do not infer portfolio risk reduction, strategic risk management benefits, commercial value,
   cost savings, or decision-grade evidence unless those facts are explicitly present in the data.
+- Sign off with {sender['name']} and {sender['title']} without adding extra claims.
 
-Behavior by fit:
-- If Scientific Relevance is TRUE: write a specific scientific outreach email grounded only in the
-  exact evidence listed above.
-- If Scientific Relevance is FALSE: write a simple introduction only. Acknowledge the role, introduce
-  the sender, briefly describe Metabolon as having capabilities in metabolomics and biomarker support
-  for pharmaceutical R&D organizations, and ask whether there are colleagues closer to translational
-  research, biomarkers, discovery, pharmacology, clinical development, or omics activities. Do NOT
-  propose a specific Metabolon use case. Do NOT claim Metabolon solves that person's problem. Do NOT
-  infer scientific needs, portfolio decision support, risk reduction, or strategic decision-making
-  benefits.
+Email structure:
+1. Sentence 1: Specific observation about the person.
+2. Sentence 2: A real problem or question relevant to that role.
+3. Sentence 3: One sentence about how metabolomics can sometimes help illuminate that problem.
+4. Sentence 4: Why I thought of them specifically.
+5. Sentence 5: Simple meeting request; do not use the word "discussion".
+6. Sentence 6: Redirect request if someone else owns the topic.
+
+Scientific relevance handling:
+- If Scientific Relevance is TRUE, ground the email only in exact evidence listed above.
+- If Scientific Relevance is FALSE, do not propose a specific Metabolon use case and do not infer
+  scientific needs. Keep the note to referral discovery using the same six-sentence structure.
+- When Scientific Relevance is FALSE, the redirect request should ask who owns translational
+  research, biomarkers, discovery, pharmacology, clinical development, or omics activities.
 
 Forbidden when Scientific Relevance is FALSE:
 - Do not propose a specific Metabolon use case.
@@ -316,19 +321,8 @@ Forbidden when Scientific Relevance is FALSE:
   risk, strengthen strategic decision making, improve operations, lower costs, or solve procurement,
   finance, legal, strategy, PMO, or operational problems.
 
-Preferred email structure:
-Greeting
-
-My name is [Sender Name], and I support [Account] as [Sender Title] at [Sender Company].
-
-Given your [role/focus], I thought it could be useful to connect.
-
-Only when Scientific Relevance is TRUE, one short paragraph explaining the relevant Metabolon scientific capability.
-When Scientific Relevance is FALSE, do not include a capability claim beyond the brief company description; ask for guidance to a more scientifically aligned colleague.
-
-Brief invitation to connect or guidance to the right colleague.
-
-Sign-off with sender name and title.
+Before finalizing the email, silently ask: "Would a senior pharma executive believe this was
+personally written?" If the answer is no, rewrite automatically before returning the final output.
 
 Saved intelligence report:
 {report}
