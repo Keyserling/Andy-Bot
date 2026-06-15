@@ -301,10 +301,16 @@ If no concrete hook exists, use the job role honestly. Do not invent.
 Step 2: Build the email around this sequence:
 1. Dear FirstName,
 2. Concrete observation from LinkedIn.
-3. Real question/problem naturally connected to that observation.
-4. One restrained Metabolon/metabolomics bridge.
+3. Thought or hypothesis naturally connected to that observation.
+4. One restrained Metabolon/metabolomics connection.
 5. Simple 20-minute Teams ask.
 6. Redirect sentence if they are not the right person.
+
+Required email shape:
+- The email must read as observation → thought → connection → meeting.
+- Never use the shape observation → question → pitch → meeting.
+- Do not ask generic consulting questions.
+- Make a concrete observation and a hypothesis instead of opening with a question.
 
 Hard rules:
 - 90-130 words.
@@ -312,6 +318,14 @@ Hard rules:
 - Always start with "Dear {greeting_name},"
 - Never start with "My name is..."
 - Never start with Metabolon.
+- Do not use these forbidden openings:
+  - "How do you currently..."
+  - "How are you currently..."
+  - "How do you balance..."
+  - "How do you handle..."
+  - "I noticed..."
+  - "I came across..."
+  - "I saw..."
 - Do not flatter.
 - Do not say "impressive", "extensive leadership", "your work stands out", or similar praise.
 - Do not use generic challenges unless directly tied to the LinkedIn hook.
