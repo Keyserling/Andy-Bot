@@ -1,19 +1,31 @@
 # Andy Bot
 
-Andy Bot is a Streamlit app for rapid Metabolon outreach generation from an uploaded contact list.
+Andy Bot is a Streamlit app for generating persona-template Metabolon outreach from an uploaded CSV contact list.
 
 ## Workflow
 
-1. Upload a CSV or XLSX contact list.
-2. Andy Bot processes up to 20 contacts.
-3. It identifies each contact persona from title and role fields.
-4. It selects a persona-specific Metabolon outreach narrative.
-5. It generates a copy/paste table with only:
+1. Upload a CSV contact list.
+2. Andy Bot classifies every contact into exactly one persona:
+   - Discovery
+   - Translational Research
+   - Clinical Development
+   - Clinical Biomarkers
+   - Bioanalysis
+   - Medical Affairs
+   - Epidemiology
+   - Safety / Risk
+   - Computational Biology
+   - Oncology Research
+   - Immunology Research
+3. It selects the matching Metabolon narrative for that persona.
+4. It generates and exports a table with one row per contact:
    - Name
+   - Company
+   - Persona
    - Subject
    - Email
 
-Generated emails are constrained to 80-140 words, start with `Dear FirstName,`, use persona-specific scientific context, and include a simple meeting request.
+Generated emails are constrained to 80-140 words, start with `Dear FirstName,`, use simple scientifically relevant language, and include a brief meeting request. The app does not generate LinkedIn profile analysis, long reports, contact intelligence reports, why-this-person outputs, or confidence scores.
 
 ## Setup
 

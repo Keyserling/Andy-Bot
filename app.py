@@ -1,10 +1,10 @@
-"""Andy Bot Streamlit application for rapid Metabolon outreach generation.
+"""Andy Bot Streamlit application for persona-template Metabolon outreach.
 
 Workflow:
-1. Upload a CSV or XLSX contact list.
-2. Identify each contact persona from title and role fields.
-3. Select the appropriate Metabolon outreach narrative.
-4. Generate only Name, Subject, and Email in a copy/paste table.
+1. Upload a CSV contact list.
+2. Classify each contact into one persona template.
+3. Select the matching Metabolon narrative.
+4. Generate Name, Company, Persona, Subject, and Email for CSV export.
 """
 
 from __future__ import annotations
@@ -20,7 +20,6 @@ from dotenv import load_dotenv
 from openai import OpenAI, OpenAIError
 
 DEFAULT_MODEL = "gpt-4.1-mini"
-MAX_CONTACTS = 20
 
 PERSONAS = (
     "Discovery",
@@ -29,8 +28,8 @@ PERSONAS = (
     "Clinical Biomarkers",
     "Bioanalysis",
     "Medical Affairs",
-    "Epidemiology / HEOR",
-    "Safety / Risk Management",
+    "Epidemiology",
+    "Safety / Risk",
     "Computational Biology",
     "Oncology Research",
     "Immunology Research",
@@ -38,7 +37,7 @@ PERSONAS = (
 
 PERSONA_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
-        "Epidemiology / HEOR",
+        "Epidemiology",
         (
             "epidemiology",
             "epidemiologist",
@@ -47,11 +46,12 @@ PERSONA_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "outcomes research",
             "real world evidence",
             "rwe",
-            "market access",
+            "population health",
+            "cohort",
         ),
     ),
     (
-        "Safety / Risk Management",
+        "Safety / Risk",
         (
             "safety",
             "pharmacovigilance",
@@ -59,6 +59,8 @@ PERSONA_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "patient safety",
             "drug safety",
             "benefit risk",
+            "toxicology",
+            "toxicity",
         ),
     ),
     (
@@ -153,17 +155,17 @@ PERSONA_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 NARRATIVES = {
-    "Discovery": "Use metabolomics to connect target biology, mechanism, and pathway-level phenotype early enough to shape discovery decisions.",
-    "Translational Research": "Use metabolomics as a bridge between model systems and human samples to clarify mechanism, pharmacology, and translational relevance.",
-    "Clinical Development": "Use metabolomics to read drug response, disease biology, and patient heterogeneity within clinical studies without adding a large operational burden.",
-    "Clinical Biomarkers": "Use metabolomics to discover and validate biomarkers tied to pharmacodynamic response, patient segmentation, and disease activity.",
-    "Bioanalysis": "Use Metabolon's LC-MS metabolomics experience to add broad biochemical context alongside targeted bioanalytical and PK/PD work.",
-    "Medical Affairs": "Use metabolomics evidence to help explain disease biology, treatment response, and clinically meaningful biochemical differences to scientific stakeholders.",
-    "Epidemiology / HEOR": "Use metabolomics to add biological depth to cohorts, outcomes research, RWE, and population-level disease stratification.",
-    "Safety / Risk Management": "Use metabolomics to detect biochemical changes that may help interpret toxicity, off-target effects, and risk signals earlier.",
-    "Computational Biology": "Use metabolomics as a high-dimensional phenotype layer that can strengthen multi-omics models and biological interpretation.",
-    "Oncology Research": "Use metabolomics to characterize tumor metabolism, host response, treatment effect, and resistance biology across oncology studies.",
-    "Immunology Research": "Use metabolomics to understand immune cell state, inflammatory pathways, disease activity, and treatment response in immune-mediated disease.",
+    "Discovery": "Metabolomics can connect target biology, mechanism, and pathway-level phenotype early enough to shape discovery decisions.",
+    "Translational Research": "Metabolomics can bridge model systems and human samples to clarify mechanism, pharmacology, and translational relevance.",
+    "Clinical Development": "Metabolomics can read drug response, disease biology, and patient heterogeneity within clinical studies without adding a large operational burden.",
+    "Clinical Biomarkers": "Metabolomics can support biomarker discovery and validation tied to pharmacodynamic response, patient segmentation, and disease activity.",
+    "Bioanalysis": "Broad LC-MS metabolomics can add biochemical context alongside targeted bioanalytical and PK/PD work.",
+    "Medical Affairs": "Metabolomics evidence can help explain disease biology, treatment response, and clinically meaningful biochemical differences to scientific stakeholders.",
+    "Epidemiology": "Metabolomics can add biological depth to cohorts, outcomes research, RWE, and population-level disease stratification.",
+    "Safety / Risk": "Metabolomics can help interpret toxicity, off-target effects, and risk signals through earlier biochemical change detection.",
+    "Computational Biology": "Metabolomics can serve as a high-dimensional phenotype layer that strengthens multi-omics models and biological interpretation.",
+    "Oncology Research": "Metabolomics can characterize tumor metabolism, host response, treatment effect, and resistance biology across oncology studies.",
+    "Immunology Research": "Metabolomics can clarify immune cell state, inflammatory pathways, disease activity, and treatment response in immune-mediated disease.",
 }
 
 
@@ -171,31 +173,57 @@ class ContactOutreach(NamedTuple):
     """Generated outreach output for one contact."""
 
     name: str
+    company: str
+    persona: str
     subject: str
     email: str
 
 
-def find_name_column(dataframe: pd.DataFrame) -> str | None:
-    """Find the most likely contact-name column in uploaded contact data."""
+def find_column(dataframe: pd.DataFrame, candidates: tuple[str, ...]) -> str | None:
+    """Find a column by normalized candidate names."""
     if dataframe.empty:
         return None
 
     normalized = {column.lower().strip(): column for column in dataframe.columns}
-    for candidate in (
-        "name",
-        "full_name",
-        "full name",
-        "contact",
-        "contact_name",
-        "contact name",
-    ):
+    for candidate in candidates:
         if candidate in normalized:
             return normalized[candidate]
+    return None
+
+
+def find_name_column(dataframe: pd.DataFrame) -> str | None:
+    """Find the most likely contact-name column in uploaded contact data."""
+    direct_match = find_column(
+        dataframe,
+        ("name", "full_name", "full name", "contact", "contact_name", "contact name"),
+    )
+    if direct_match:
+        return direct_match
 
     text_columns = [
         column for column in dataframe.columns if dataframe[column].dtype == "object"
     ]
-    return text_columns[0] if text_columns else dataframe.columns[0]
+    if text_columns:
+        return text_columns[0]
+    return dataframe.columns[0] if len(dataframe.columns) else None
+
+
+def find_company_column(dataframe: pd.DataFrame) -> str | None:
+    """Find the most likely company or account column in uploaded contact data."""
+    return find_column(
+        dataframe,
+        (
+            "company",
+            "company name",
+            "company_name",
+            "account",
+            "account name",
+            "account_name",
+            "organization",
+            "organisation",
+            "employer",
+        ),
+    )
 
 
 def find_role_columns(dataframe: pd.DataFrame) -> list[str]:
@@ -209,11 +237,14 @@ def find_role_columns(dataframe: pd.DataFrame) -> list[str]:
     return matches or list(dataframe.columns)
 
 
-def get_contact_name(contact: pd.Series, name_column: str) -> str:
-    """Return the selected contact's display name."""
-    value: Any = contact.get(name_column, "")
+def get_cell_value(contact: pd.Series, column: str | None, fallback: str) -> str:
+    """Return a cleaned string value from a contact row."""
+    if not column:
+        return fallback
+
+    value: Any = contact.get(column, "")
     if pd.isna(value) or str(value).strip() == "":
-        return "Unnamed Contact"
+        return fallback
     return str(value).strip()
 
 
@@ -240,7 +271,7 @@ def row_to_text(contact: pd.Series, columns: list[str] | None = None) -> str:
 
 
 def identify_persona(contact: pd.Series, role_columns: list[str]) -> str:
-    """Identify the primary outreach persona from title and role fields."""
+    """Classify a contact into exactly one persona template."""
     role_text = " ".join(
         str(contact.get(column, ""))
         for column in role_columns
@@ -256,20 +287,26 @@ def identify_persona(contact: pd.Series, role_columns: list[str]) -> str:
 
 
 def build_email_prompt(
-    contact: pd.Series, name: str, persona: str, narrative: str, role_columns: list[str]
+    contact: pd.Series,
+    name: str,
+    company: str,
+    persona: str,
+    narrative: str,
+    role_columns: list[str],
 ) -> str:
-    """Create a strict prompt for one persona-specific outreach email."""
+    """Create a strict prompt for one persona-template outreach email."""
     first_name = get_contact_first_name(name)
     return f"""
-Generate one Metabolon outreach email.
+Generate one Metabolon outreach email from the selected persona template.
 
 Output only valid JSON with exactly these keys:
-{{"name":"{name}","subject":"...","email":"..."}}
+{{"subject":"...","email":"..."}}
 
 Contact name: {name}
 Recipient first name: {first_name}
-Identified persona: {persona}
-Metabolon outreach narrative: {narrative}
+Company: {company}
+Persona: {persona}
+Selected Metabolon narrative: {narrative}
 
 Title and role evidence:
 {row_to_text(contact, role_columns)}
@@ -279,9 +316,10 @@ Other CSV context:
 
 Style requirements:
 - Similar in style to Andrew Noel outreach emails: direct, plain-spoken, scientifically literate, specific, and restrained.
-- Persona-specific and scientifically relevant to the identified persona.
-- Simple meeting request.
-- No reports, explanations, scores, reasoning, or markdown.
+- Simple and scientifically relevant to the persona.
+- Ask for a brief meeting.
+- No marketing language.
+- No reports, long reports, contact intelligence reports, why-this-person outputs, confidence scores, explanations, reasoning, or markdown.
 
 Email rules:
 - 80-140 words.
@@ -303,7 +341,9 @@ def generate_text(prompt: str, model: str) -> str:
     return str(response).strip()
 
 
-def parse_outreach(raw_output: str, fallback_name: str) -> ContactOutreach:
+def parse_outreach(
+    raw_output: str, fallback_name: str, fallback_company: str, persona: str
+) -> ContactOutreach:
     """Parse model JSON into stable table fields."""
     cleaned = raw_output.strip()
     cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
@@ -311,23 +351,28 @@ def parse_outreach(raw_output: str, fallback_name: str) -> ContactOutreach:
     try:
         payload = json.loads(cleaned)
     except json.JSONDecodeError:
-        return ContactOutreach(fallback_name, "", cleaned)
+        return ContactOutreach(fallback_name, fallback_company, persona, "", cleaned)
 
     return ContactOutreach(
-        str(payload.get("name") or fallback_name).strip(),
+        fallback_name,
+        fallback_company,
+        persona,
         str(payload.get("subject") or "").strip(),
         str(payload.get("email") or "").strip(),
     )
 
 
 def read_contacts(uploaded_file: Any) -> pd.DataFrame:
-    """Read contacts from a CSV or XLSX upload."""
+    """Read contacts from a CSV upload."""
     filename = uploaded_file.name.lower()
     if filename.endswith(".csv"):
         return pd.read_csv(uploaded_file)
-    if filename.endswith((".xlsx", ".xls")):
-        return pd.read_excel(uploaded_file)
-    raise ValueError("Upload a CSV or XLSX file.")
+    raise ValueError("Upload a CSV file.")
+
+
+def empty_output_table() -> pd.DataFrame:
+    """Return an empty output table with the required export columns."""
+    return pd.DataFrame(columns=["Name", "Company", "Persona", "Subject", "Email"])
 
 
 def initialize_session_state() -> None:
@@ -335,38 +380,43 @@ def initialize_session_state() -> None:
     defaults = {
         "contacts": None,
         "uploaded_filename": "",
-        "generated_emails": pd.DataFrame(columns=["Name", "Subject", "Email"]),
+        "generated_emails": empty_output_table(),
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
 
 
 def generate_outreach_table(contacts: pd.DataFrame, model: str) -> pd.DataFrame:
-    """Generate outreach for up to 20 contacts and return copy/paste table columns only."""
+    """Generate one persona-template email row for every uploaded contact."""
     name_column = find_name_column(contacts)
     if not name_column:
         raise ValueError("Could not find any columns in the uploaded file.")
 
+    company_column = find_company_column(contacts)
     role_columns = find_role_columns(contacts)
     rows: list[ContactOutreach] = []
-    progress = st.progress(0, text="Generating emails...")
+    progress = st.progress(0, text="Classifying contacts and generating emails...")
 
-    contacts_to_process = contacts.head(MAX_CONTACTS)
-    for position, (_, contact) in enumerate(contacts_to_process.iterrows(), start=1):
-        name = get_contact_name(contact, name_column)
+    total_contacts = len(contacts)
+    for position, (_, contact) in enumerate(contacts.iterrows(), start=1):
+        name = get_cell_value(contact, name_column, "Unnamed Contact")
+        company = get_cell_value(contact, company_column, "")
         persona = identify_persona(contact, role_columns)
         narrative = NARRATIVES[persona]
         raw_output = generate_text(
-            build_email_prompt(contact, name, persona, narrative, role_columns), model
+            build_email_prompt(contact, name, company, persona, narrative, role_columns),
+            model,
         )
-        rows.append(parse_outreach(raw_output, name))
+        rows.append(parse_outreach(raw_output, name, company, persona))
         progress.progress(
-            position / len(contacts_to_process),
-            text=f"Generated {position} of {len(contacts_to_process)} emails",
+            position / total_contacts,
+            text=f"Generated {position} of {total_contacts} emails",
         )
 
     progress.empty()
-    return pd.DataFrame(rows, columns=["Name", "Subject", "Email"])
+    return pd.DataFrame(
+        rows, columns=["Name", "Company", "Persona", "Subject", "Email"]
+    )
 
 
 def main() -> None:
@@ -376,7 +426,7 @@ def main() -> None:
 
     st.title("🤖 Andy Bot")
     st.caption(
-        "Upload a CSV contact list and generate Name, Subject, and Email for up to 20 contacts."
+        "Upload a CSV contact list to classify each contact into a persona template and export one email per contact."
     )
 
     with st.sidebar:
@@ -386,17 +436,17 @@ def main() -> None:
             value=os.getenv("OPENAI_MODEL", DEFAULT_MODEL),
             help="Override with any model available to your API key.",
         )
+        st.markdown("**Personas**")
+        st.write(", ".join(PERSONAS))
 
-    uploaded_file = st.file_uploader(
-        "Upload contacts CSV or XLSX", type=["csv", "xlsx", "xls"]
-    )
+    uploaded_file = st.file_uploader("Upload contacts CSV", type=["csv"])
     if (
         uploaded_file is not None
         and uploaded_file.name != st.session_state.uploaded_filename
     ):
         try:
             contacts = read_contacts(uploaded_file)
-        except Exception as exc:  # pandas parsing errors vary by file type and version
+        except Exception as exc:  # pandas parsing errors vary by file content and version
             st.error(f"Could not read contacts file: {exc}")
             return
 
@@ -406,26 +456,18 @@ def main() -> None:
 
         st.session_state.contacts = contacts
         st.session_state.uploaded_filename = uploaded_file.name
-        st.session_state.generated_emails = pd.DataFrame(
-            columns=["Name", "Subject", "Email"]
-        )
+        st.session_state.generated_emails = empty_output_table()
         st.success(
-            f"Imported {len(contacts)} contacts. Andy Bot will process the first {min(len(contacts), MAX_CONTACTS)}."
+            f"Imported {len(contacts)} contacts. Andy Bot will export one email per contact."
         )
 
     contacts = st.session_state.contacts
     if contacts is None:
-        st.warning("Upload a CSV or XLSX file to get started.")
+        st.warning("Upload a CSV file to get started.")
         return
 
-    preview_contacts = contacts.head(MAX_CONTACTS)
     st.subheader("Contacts to Process")
-    st.dataframe(preview_contacts, use_container_width=True)
-
-    if len(contacts) > MAX_CONTACTS:
-        st.info(
-            f"Only the first {MAX_CONTACTS} contacts will be processed to keep the workflow under 10 minutes."
-        )
+    st.dataframe(contacts, use_container_width=True)
 
     if st.button("Generate emails", type="primary"):
         if not model.strip():
@@ -449,9 +491,9 @@ def main() -> None:
             st.session_state.generated_emails, use_container_width=True, hide_index=True
         )
         st.download_button(
-            "Download CSV",
+            "Export all emails as CSV",
             data=st.session_state.generated_emails.to_csv(index=False),
-            file_name="andy_bot_generated_emails.csv",
+            file_name="andy_bot_persona_emails.csv",
             mime="text/csv",
         )
 
