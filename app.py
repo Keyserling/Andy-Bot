@@ -14,7 +14,7 @@ import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import pandas as pd
 import streamlit as st
@@ -23,6 +23,50 @@ from openai import OpenAI, OpenAIError
 
 OUTPUT_DIR = Path("outputs")
 DEFAULT_MODEL = "gpt-4.1-mini"
+
+DEFAULT_SENDER_NAME = "Helmut von Keyserling"
+DEFAULT_SENDER_TITLE = "Strategic Account Manager"
+DEFAULT_SENDER_COMPANY = "Metabolon"
+DEFAULT_SUPPORTED_ACCOUNT = "the account"
+
+SCIENTIFIC_FIT_KEYWORDS = (
+    "discovery",
+    "translational",
+    "biomarker",
+    "pharmacology",
+    "clinical development",
+    "omics",
+    "metabolomics",
+    "proteomics",
+    "genomics",
+    "disease biology",
+    "r&d",
+    "research",
+    "scientist",
+    "biology",
+    "therapeutic",
+    "clinical",
+    "pharmacodynamic",
+)
+
+ADJACENT_FIT_KEYWORDS = (
+    "pharma",
+    "biotech",
+    "life science",
+    "medical",
+    "regulatory",
+    "operations",
+    "program",
+    "project",
+    "alliance",
+    "business development",
+    "product",
+    "portfolio",
+)
+
+
+SenderFields = dict[str, str]
+FitLevel = Literal["High", "Medium", "Low"]
 
 
 def clean_filename(value: str) -> str:
@@ -128,47 +172,68 @@ Contact details:
 """.strip()
 
 
-def build_email_prompt(report: str) -> str:
+def build_email_prompt(
+    report: str,
+    contact: pd.Series,
+    first_name: str,
+    fit: FitLevel,
+    fit_reason: str,
+    sender: SenderFields,
+) -> str:
     """Create an Andrew Noel-style outreach email based on a saved report."""
+    greeting_name = first_name or "Colleague"
     return f"""
-Generate an outreach email in Andrew Noel's Metabolon style using only the saved contact
-intelligence report below.
+Generate a credible, personalized Metabolon outreach email using only the contact data and saved
+contact intelligence report below. Write in Andrew Noel style: calm, professional, direct,
+non-salesy, and without hype.
+
+Sender context:
+{format_sender_context(sender)}
+
+Recipient first name for greeting: {greeting_name}
+Fit classification: {fit}
+Reason for fit: {fit_reason}
+
+Contact details:
+{row_to_markdown(contact)}
 
 Requirements:
-- 80-150 words
-- Professional and concise
-- Mention exactly one relevant observation about the contact's role, focus, or expertise
-- Mention one Metabolon capability that matches that focus
-- Avoid hype
-- Avoid exaggerated claims
-- Avoid generic sales language
-- Avoid these phrases: "strategic risk management", "transformational", "revolutionary",
-  "game changing", "save millions", "maximize value"
-- Do not invent interests or priorities
-- If insufficient information exists, say less rather than hallucinating
-- Do not mention unavailable facts, LinkedIn research, Outlook, Gmail, or external enrichment
+- Output exactly these markdown sections:
+  1. Fit Classification
+  2. Reason for Fit
+  3. Generated Outreach Email
+- The email body must be 80-150 words.
+- Start with "Good morning {greeting_name}," or "Dear {greeting_name},". Never start with "Hello," alone.
+- Include this introduction concept without hardcoding anyone else: "My name is {sender['name']}, and I support {sender['account']} as {sender['title']} at {sender['company']}."
+- Sign off with {sender['name']} and {sender['title']}.
+- Do not mention LinkedIn, Outlook, Gmail, external enrichment, or unavailable facts.
+- Do not use: "I hope this message finds you well", "transformational", "revolutionary",
+  "game-changing", "game changing", "save millions", "maximize value".
+- Do not infer portfolio risk reduction, strategic risk management benefits, commercial value,
+  cost savings, or decision-grade evidence unless those facts are explicitly present in the data.
+
+Behavior by fit:
+- High: write a specific scientific outreach email grounded in the observed role/focus.
+- Medium: write a cautious introduction; keep the relevance statement broad and careful.
+- Low: write a short general introduction and ask for guidance to the right colleague. Never invent
+  a specialized scientific angle for a low-fit contact.
 
 Preferred email structure:
 Greeting
 
-Short introduction:
-"I support [Company] as Strategic Account Manager at Metabolon."
+My name is [Sender Name], and I support [Account] as [Sender Title] at [Sender Company].
 
-One sentence referencing the recipient's area of focus.
+Given your [role/focus], I thought it could be useful to connect.
 
-One short paragraph describing the most relevant Metabolon capability.
+One short paragraph explaining the relevant Metabolon capability, adjusted to the fit level.
 
-One sentence inviting a brief conversation.
+Brief invitation to connect or guidance to the right colleague.
 
-Professional sign-off.
-
-Return markdown with exactly these sections:
-1. Outreach Email
+Sign-off with sender name and title.
 
 Saved intelligence report:
 {report}
 """.strip()
-
 
 def generate_text(prompt: str, model: str) -> str:
     """Generate text using the OpenAI Responses API."""
@@ -198,6 +263,55 @@ def get_contact_name(contact: pd.Series, name_column: str) -> str:
     if pd.isna(value) or str(value).strip() == "":
         return "Unnamed Contact"
     return str(value).strip()
+
+
+def get_contact_first_name(contact: pd.Series, name_column: str) -> str:
+    """Return the contact's first name when a name value is available."""
+    full_name = get_contact_name(contact, name_column)
+    if full_name == "Unnamed Contact":
+        return ""
+
+    name_without_email = re.sub(r"<[^>]+>", "", full_name).strip()
+    name_parts = re.findall(r"[A-Za-z][A-Za-z'’-]*", name_without_email)
+    return name_parts[0] if name_parts else ""
+
+
+def classify_contact_fit(contact: pd.Series, report: str = "") -> tuple[FitLevel, str]:
+    """Classify how clearly a contact fits Metabolon scientific outreach."""
+    combined_text = f"{row_to_markdown(contact)}\n{report}".lower()
+    scientific_matches = [keyword for keyword in SCIENTIFIC_FIT_KEYWORDS if keyword in combined_text]
+    adjacent_matches = [keyword for keyword in ADJACENT_FIT_KEYWORDS if keyword in combined_text]
+
+    if scientific_matches:
+        return (
+            "High",
+            "Clear Metabolon-relevant scientific or translational signal: "
+            + ", ".join(scientific_matches[:4])
+            + ".",
+        )
+    if adjacent_matches:
+        return (
+            "Medium",
+            "Pharma/R&D-adjacent signal is present, but the contact data does not clearly show a specific scientific focus: "
+            + ", ".join(adjacent_matches[:4])
+            + ".",
+        )
+    return (
+        "Low",
+        "The provided contact data does not show a clear Metabolon-relevant scientific or translational connection.",
+    )
+
+
+def format_sender_context(sender: SenderFields) -> str:
+    """Format sender configuration for prompt grounding."""
+    return "\n".join(
+        [
+            f"- Sender Name: {sender['name']}",
+            f"- Sender Title: {sender['title']}",
+            f"- Sender Company: {sender['company']}",
+            f"- Supported Account / Customer: {sender['account']}",
+        ]
+    )
 
 
 def read_contacts(uploaded_file: Any) -> pd.DataFrame:
@@ -261,6 +375,11 @@ def main() -> None:
             value=os.getenv("OPENAI_MODEL", DEFAULT_MODEL),
             help="Override with any model available to your API key.",
         )
+        st.subheader("Sender")
+        sender_name = st.text_input("Sender Name", value=DEFAULT_SENDER_NAME)
+        sender_title = st.text_input("Sender Title", value=DEFAULT_SENDER_TITLE)
+        sender_company = st.text_input("Sender Company", value=DEFAULT_SENDER_COMPANY)
+        supported_account = st.text_input("Supported Account / Customer", value=DEFAULT_SUPPORTED_ACCOUNT)
         st.info("Outlook, LinkedIn scraping, and Gmail integrations are intentionally not included in V1.")
 
     uploaded_file = st.file_uploader("Upload contacts CSV or XLSX", type=["csv", "xlsx", "xls"])
@@ -313,6 +432,13 @@ def main() -> None:
 
     selected_contact = contacts.loc[selected_index]
     selected_name = get_contact_name(selected_contact, name_column)
+    selected_first_name = get_contact_first_name(selected_contact, name_column)
+    sender: SenderFields = {
+        "name": sender_name.strip() or DEFAULT_SENDER_NAME,
+        "title": sender_title.strip() or DEFAULT_SENDER_TITLE,
+        "company": sender_company.strip() or DEFAULT_SENDER_COMPANY,
+        "account": supported_account.strip() or DEFAULT_SUPPORTED_ACCOUNT,
+    }
 
     st.subheader("Selected Contact Details")
     details = pd.DataFrame(
@@ -362,7 +488,18 @@ def main() -> None:
 
             with st.spinner("Generating outreach email with OpenAI..."):
                 try:
-                    email = generate_text(build_email_prompt(st.session_state.report), model.strip())
+                    fit, fit_reason = classify_contact_fit(selected_contact, st.session_state.report)
+                    email = generate_text(
+                        build_email_prompt(
+                            st.session_state.report,
+                            selected_contact,
+                            selected_first_name,
+                            fit,
+                            fit_reason,
+                            sender,
+                        ),
+                        model.strip(),
+                    )
                     email_path = save_markdown(selected_name, email, "outreach_email")
                 except OpenAIError as exc:
                     st.error(f"OpenAI request failed: {exc}")
