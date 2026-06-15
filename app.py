@@ -3,55 +3,34 @@
 Workflow:
 1. Upload a CSV contact list.
 2. Classify each contact into one persona template.
-3. Select the matching Metabolon narrative.
+3. Select the matching Metabolon email template.
 4. Generate Name, Company, Persona, Subject, and Email for CSV export.
 """
 
 from __future__ import annotations
 
-import json
-import os
 import re
 from typing import Any, NamedTuple
 
 import pandas as pd
 import streamlit as st
-from dotenv import load_dotenv
-from openai import OpenAI, OpenAIError
-
-DEFAULT_MODEL = "gpt-4.1-mini"
 
 PERSONAS = (
     "Discovery",
     "Translational Research",
-    "Clinical Development",
     "Clinical Biomarkers",
-    "Bioanalysis",
+    "Clinical Development",
     "Medical Affairs",
-    "Epidemiology",
-    "Safety / Risk",
+    "Oncology",
+    "Immunology",
+    "Safety/Risk",
+    "Bioanalysis",
     "Computational Biology",
-    "Oncology Research",
-    "Immunology Research",
 )
 
 PERSONA_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
-        "Epidemiology",
-        (
-            "epidemiology",
-            "epidemiologist",
-            "heor",
-            "health economics",
-            "outcomes research",
-            "real world evidence",
-            "rwe",
-            "population health",
-            "cohort",
-        ),
-    ),
-    (
-        "Safety / Risk",
+        "Safety/Risk",
         (
             "safety",
             "pharmacovigilance",
@@ -123,11 +102,11 @@ PERSONA_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
-        "Oncology Research",
+        "Oncology",
         ("oncology", "cancer", "tumor", "tumour", "immuno-oncology", "io research"),
     ),
     (
-        "Immunology Research",
+        "Immunology",
         ("immunology", "inflammation", "autoimmune", "immune", "immunotherapy"),
     ),
     (
@@ -154,18 +133,96 @@ PERSONA_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
 )
 
-NARRATIVES = {
-    "Discovery": "Metabolomics can connect target biology, mechanism, and pathway-level phenotype early enough to shape discovery decisions.",
-    "Translational Research": "Metabolomics can bridge model systems and human samples to clarify mechanism, pharmacology, and translational relevance.",
-    "Clinical Development": "Metabolomics can read drug response, disease biology, and patient heterogeneity within clinical studies without adding a large operational burden.",
-    "Clinical Biomarkers": "Metabolomics can support biomarker discovery and validation tied to pharmacodynamic response, patient segmentation, and disease activity.",
-    "Bioanalysis": "Broad LC-MS metabolomics can add biochemical context alongside targeted bioanalytical and PK/PD work.",
-    "Medical Affairs": "Metabolomics evidence can help explain disease biology, treatment response, and clinically meaningful biochemical differences to scientific stakeholders.",
-    "Epidemiology": "Metabolomics can add biological depth to cohorts, outcomes research, RWE, and population-level disease stratification.",
-    "Safety / Risk": "Metabolomics can help interpret toxicity, off-target effects, and risk signals through earlier biochemical change detection.",
-    "Computational Biology": "Metabolomics can serve as a high-dimensional phenotype layer that strengthens multi-omics models and biological interpretation.",
-    "Oncology Research": "Metabolomics can characterize tumor metabolism, host response, treatment effect, and resistance biology across oncology studies.",
-    "Immunology Research": "Metabolomics can clarify immune cell state, inflammatory pathways, disease activity, and treatment response in immune-mediated disease.",
+EMAIL_TEMPLATES = {
+    "Discovery": {
+        "subject": "Metabolomics for discovery work at {company}",
+        "use_case": (
+            "For discovery teams, Metabolon helps connect target biology to pathway-level "
+            "biochemistry in cells, models, and early translational samples. This can help "
+            "prioritize mechanisms, identify metabolic shifts linked to phenotype, and make "
+            "earlier decisions about which programs should move forward."
+        ),
+    },
+    "Translational Research": {
+        "subject": "Metabolomics for translational research at {company}",
+        "use_case": (
+            "For translational research teams, Metabolon helps compare biology across models "
+            "and human samples using a consistent biochemical readout. This can support mechanism "
+            "of action work, pharmacology interpretation, and decisions about which signals are "
+            "most relevant for clinical studies."
+        ),
+    },
+    "Clinical Biomarkers": {
+        "subject": "Metabolomics for clinical biomarker work at {company}",
+        "use_case": (
+            "For clinical biomarker teams, Metabolon helps identify biochemical markers tied to "
+            "drug response, disease activity, and patient segmentation. This can support "
+            "pharmacodynamic readouts and biomarker strategies that need clear biological context."
+        ),
+    },
+    "Clinical Development": {
+        "subject": "Metabolomics for clinical development at {company}",
+        "use_case": (
+            "For clinical development teams, Metabolon helps read drug response, disease biology, "
+            "and patient heterogeneity directly from clinical samples. This can add biological "
+            "context to endpoints, dose decisions, and responder analyses without creating a large "
+            "operational burden for the study."
+        ),
+    },
+    "Medical Affairs": {
+        "subject": "Metabolomics for medical affairs at {company}",
+        "use_case": (
+            "For medical affairs teams, Metabolon helps explain disease biology and treatment "
+            "response through measurable biochemical differences. This can support scientific "
+            "exchange with clinicians, researchers, and external experts when the discussion needs "
+            "clear evidence rather than broad claims."
+        ),
+    },
+    "Oncology": {
+        "subject": "Metabolomics for oncology work at {company}",
+        "use_case": (
+            "For oncology teams, Metabolon helps characterize tumor metabolism, host response, "
+            "treatment effect, and resistance biology across research and clinical samples. This "
+            "can support mechanism work, patient stratification, and interpretation of response in "
+            "complex oncology studies."
+        ),
+    },
+    "Immunology": {
+        "subject": "Metabolomics for immunology work at {company}",
+        "use_case": (
+            "For immunology teams, Metabolon helps connect immune activity with the biochemical "
+            "pathways that reflect inflammation, disease activity, and treatment response. This can "
+            "support work in autoimmune and immune-mediated disease where pathway context is needed "
+            "alongside cellular or cytokine readouts."
+        ),
+    },
+    "Safety/Risk": {
+        "subject": "Metabolomics for safety and risk work at {company}",
+        "use_case": (
+            "For safety and risk teams, Metabolon helps detect biochemical changes that may explain "
+            "toxicity, off-target effects, or emerging risk signals. This can support earlier "
+            "interpretation of organ-specific effects and help distinguish adaptive changes from "
+            "signals that need closer follow-up."
+        ),
+    },
+    "Bioanalysis": {
+        "subject": "Metabolomics alongside bioanalysis at {company}",
+        "use_case": (
+            "For bioanalysis teams, Metabolon adds broad biochemical context alongside targeted "
+            "assays, PK/PD work, and regulated sample analysis. This can help connect exposure and "
+            "response to pathway-level changes when standard analyte panels do not explain the "
+            "biology."
+        ),
+    },
+    "Computational Biology": {
+        "subject": "Metabolomics for computational biology at {company}",
+        "use_case": (
+            "For computational biology teams, Metabolon provides a high-dimensional phenotype layer "
+            "that can strengthen multi-omics models and biological interpretation. This can help "
+            "connect genomic, transcriptomic, or proteomic patterns to measured biochemical activity "
+            "in the same disease or treatment context."
+        ),
+    },
 }
 
 
@@ -286,80 +343,23 @@ def identify_persona(contact: pd.Series, role_columns: list[str]) -> str:
     return "Discovery"
 
 
-def build_email_prompt(
-    contact: pd.Series,
-    name: str,
-    company: str,
-    persona: str,
-    narrative: str,
-    role_columns: list[str],
-) -> str:
-    """Create a strict prompt for one persona-template outreach email."""
+def build_email(name: str, company: str, persona: str) -> ContactOutreach:
+    """Build deterministic outreach from the selected persona template."""
     first_name = get_contact_first_name(name)
-    return f"""
-Generate one Metabolon outreach email from the selected persona template.
-
-Output only valid JSON with exactly these keys:
-{{"subject":"...","email":"..."}}
-
-Contact name: {name}
-Recipient first name: {first_name}
-Company: {company}
-Persona: {persona}
-Selected Metabolon narrative: {narrative}
-
-Title and role evidence:
-{row_to_text(contact, role_columns)}
-
-Other CSV context:
-{row_to_text(contact)}
-
-Style requirements:
-- Similar in style to Andrew Noel outreach emails: direct, plain-spoken, scientifically literate, specific, and restrained.
-- Simple and scientifically relevant to the persona.
-- Ask for a brief meeting.
-- No marketing language.
-- No reports, long reports, contact intelligence reports, why-this-person outputs, confidence scores, explanations, reasoning, or markdown.
-
-Email rules:
-- 80-140 words.
-- Start exactly with: Dear {first_name},
-- Mention Metabolon at most once.
-- Do not start with "My name is", "I noticed", "I came across", or "I saw".
-- Avoid vendor language and do not use: capabilities, platform, solution, leverage, synergy, value proposition, actionable insights, discuss further.
-- Close with a simple request for a brief meeting or 20-minute conversation.
-""".strip()
-
-
-def generate_text(prompt: str, model: str) -> str:
-    """Generate text using the OpenAI Responses API."""
-    client = OpenAI()
-    response = client.responses.create(model=model, input=prompt)
-    output_text = getattr(response, "output_text", None)
-    if output_text:
-        return str(output_text).strip()
-    return str(response).strip()
-
-
-def parse_outreach(
-    raw_output: str, fallback_name: str, fallback_company: str, persona: str
-) -> ContactOutreach:
-    """Parse model JSON into stable table fields."""
-    cleaned = raw_output.strip()
-    cleaned = re.sub(r"^```(?:json)?\s*", "", cleaned)
-    cleaned = re.sub(r"\s*```$", "", cleaned)
-    try:
-        payload = json.loads(cleaned)
-    except json.JSONDecodeError:
-        return ContactOutreach(fallback_name, fallback_company, persona, "", cleaned)
-
-    return ContactOutreach(
-        fallback_name,
-        fallback_company,
-        persona,
-        str(payload.get("subject") or "").strip(),
-        str(payload.get("email") or "").strip(),
+    company_text = company or "your organization"
+    template = EMAIL_TEMPLATES[persona]
+    subject = template["subject"].format(company=company_text)
+    email = (
+        f"Dear {first_name},\n\n"
+        "My name is Helmut von Keyserling, and I support "
+        f"{company_text} as Strategic Account Manager at Metabolon.\n\n"
+        f"{template['use_case']}\n\n"
+        "If this is relevant to your work, I would welcome a brief 20-minute conversation.\n\n"
+        "Best regards,\n"
+        "Helmut von Keyserling\n"
+        "Strategic Account Manager"
     )
+    return ContactOutreach(name, company, persona, subject, email)
 
 
 def read_contacts(uploaded_file: Any) -> pd.DataFrame:
@@ -386,7 +386,7 @@ def initialize_session_state() -> None:
         st.session_state.setdefault(key, value)
 
 
-def generate_outreach_table(contacts: pd.DataFrame, model: str) -> pd.DataFrame:
+def generate_outreach_table(contacts: pd.DataFrame) -> pd.DataFrame:
     """Generate one persona-template email row for every uploaded contact."""
     name_column = find_name_column(contacts)
     if not name_column:
@@ -402,12 +402,7 @@ def generate_outreach_table(contacts: pd.DataFrame, model: str) -> pd.DataFrame:
         name = get_cell_value(contact, name_column, "Unnamed Contact")
         company = get_cell_value(contact, company_column, "")
         persona = identify_persona(contact, role_columns)
-        narrative = NARRATIVES[persona]
-        raw_output = generate_text(
-            build_email_prompt(contact, name, company, persona, narrative, role_columns),
-            model,
-        )
-        rows.append(parse_outreach(raw_output, name, company, persona))
+        rows.append(build_email(name, company, persona))
         progress.progress(
             position / total_contacts,
             text=f"Generated {position} of {total_contacts} emails",
@@ -420,7 +415,6 @@ def generate_outreach_table(contacts: pd.DataFrame, model: str) -> pd.DataFrame:
 
 
 def main() -> None:
-    load_dotenv()
     st.set_page_config(page_title="Andy Bot", page_icon="🤖", layout="wide")
     initialize_session_state()
 
@@ -431,11 +425,6 @@ def main() -> None:
 
     with st.sidebar:
         st.header("Settings")
-        model = st.text_input(
-            "OpenAI model",
-            value=os.getenv("OPENAI_MODEL", DEFAULT_MODEL),
-            help="Override with any model available to your API key.",
-        )
         st.markdown("**Personas**")
         st.write(", ".join(PERSONAS))
 
@@ -470,17 +459,8 @@ def main() -> None:
     st.dataframe(contacts, use_container_width=True)
 
     if st.button("Generate emails", type="primary"):
-        if not model.strip():
-            st.error("Enter an OpenAI model before generating emails.")
-            return
-
         try:
-            st.session_state.generated_emails = generate_outreach_table(
-                contacts, model.strip()
-            )
-        except OpenAIError as exc:
-            st.error(f"OpenAI request failed: {exc}")
-            return
+            st.session_state.generated_emails = generate_outreach_table(contacts)
         except Exception as exc:
             st.error(f"Could not generate emails: {exc}")
             return
