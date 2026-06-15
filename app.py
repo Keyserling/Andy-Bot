@@ -280,6 +280,13 @@ Requirements:
   4. Evidence
   5. Generated Outreach Email
 - The email body must be 80-150 words.
+- Write like an experienced Strategic Account Manager introducing a scientifically relevant
+  capability. The sender is a commercial professional, not a scientist or professor.
+- The goal is to start a credible business conversation, not to teach science.
+- The tone must be commercially aware, scientifically literate, professional, concise,
+  confident, and non-salesy.
+- The reader should feel the sender understands their area and may be worth speaking with.
+- Avoid language that sounds like a marketing email or an academic discussion.
 - Start with "Good morning {greeting_name}," or "Dear {greeting_name},". Never start with "Hello," alone.
 - Include this introduction concept without hardcoding anyone else: "My name is {sender['name']}, and I support {sender['account']} as {sender['title']} at {sender['company']}."
 - Sign off with {sender['name']} and {sender['title']}.
