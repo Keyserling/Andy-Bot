@@ -1,6 +1,6 @@
 # Andy Bot
 
-Andy Bot is a Streamlit app for generating persona-template Metabolon outreach from an uploaded CSV contact list.
+Andy Bot is a Streamlit app for generating varied persona-based Metabolon outreach from an uploaded CSV contact list.
 
 ## Workflow
 
@@ -16,7 +16,7 @@ Andy Bot is a Streamlit app for generating persona-template Metabolon outreach f
    - Safety/Risk
    - Bioanalysis
    - Computational Biology
-3. It selects the matching Metabolon email template for that persona.
+3. It randomly selects one of five narrative variants and one of five subject-line variants for that persona.
 4. It generates and exports a table with one row per contact:
    - Name
    - Company
@@ -24,7 +24,7 @@ Andy Bot is a Streamlit app for generating persona-template Metabolon outreach f
    - Subject
    - Email
 
-Generated emails are deterministic template output. Each email starts with `Dear FirstName,`, introduces Helmut von Keyserling as Strategic Account Manager at Metabolon, includes a persona-specific Metabolon use case paragraph, asks for a brief 20-minute conversation, and closes with Helmut von Keyserling's signature. The app does not use creative free-writing, fake flattery, over-personalization, LinkedIn profile analysis, long reports, contact intelligence reports, why-this-person outputs, or confidence scores.
+Generated emails keep persona classification, persona assignment, and the CSV workflow, while varying the outreach copy within each persona. Each persona has five narrative variants, five subject-line variants, and several concise call-to-action variants. Emails start with `Dear FirstName,`, introduce Helmut von Keyserling as Strategic Account Manager at Metabolon, use simple scientific language, avoid marketing-heavy personalization, and close with Helmut von Keyserling's signature. The app avoids starting the narrative paragraph with `For X teams...` and tracks generated email bodies so identical emails are not repeated within the same batch. The app does not use fake flattery, over-personalization, LinkedIn profile analysis, long reports, contact intelligence reports, why-this-person outputs, or confidence scores.
 
 ## Setup
 
