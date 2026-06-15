@@ -9,7 +9,7 @@ from zipfile import ZipFile
 
 import pandas as pd
 
-from app import build_email, classify_persona
+from app import build_email, classify_persona, validate_contact_integrity
 from draft_exports import EMLDraftProvider, SENDER_NOT_CONFIGURED_NOTE
 from narratives import NARRATIVE_LIBRARY, PERSONAS
 
@@ -89,6 +89,22 @@ def main() -> None:
     pharmacology_classification = classify_persona(pharmacology_contact, ["Title"])
     if pharmacology_classification.persona != "Clinical Pharmacology":
         raise AssertionError("Clinical Pharmacology should use its dedicated persona")
+
+
+    integrity_cases = (
+        ("Mario", "Bayer", "mario@bayer.com", "", "GREEN"),
+        ("AbbVie exact", "AbbVie", "lead@abbvie.com", "", "GREEN"),
+        ("AbbVie suffix", "Abbvie Deutschland Gmbh", "lead@abbvie.com", "", "GREEN"),
+        ("Missing email", "Novartis", "", "Novartis", "YELLOW"),
+        ("Alex Phipps", "AstraZeneca", "alex.phipps@bayer.com", "", "RED"),
+        ("Alex Phipps suggested", "Bayer", "alex.phipps@bayer.com", "", "GREEN"),
+    )
+    for label, company, email, linkedin_company, expected_status in integrity_cases:
+        integrity = validate_contact_integrity(company, email, linkedin_company)
+        if integrity.status != expected_status:
+            raise AssertionError(
+                f"{label} expected {expected_status}, got {integrity.status}: {integrity.reason}"
+            )
 
     sample_email = build_email("Taylor Example", "ExampleCo", "Discovery").email
     required_lines = (
