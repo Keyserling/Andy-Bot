@@ -14,7 +14,7 @@ import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, NamedTuple
 
 import pandas as pd
 import streamlit as st
@@ -29,26 +29,15 @@ DEFAULT_SENDER_TITLE = "Strategic Account Manager"
 DEFAULT_SENDER_COMPANY = "Metabolon"
 DEFAULT_SUPPORTED_ACCOUNT = "the account"
 
-SCIENTIFIC_FIT_KEYWORDS = (
-    "discovery",
-    "translational",
-    "biomarker",
-    "bioanalytical",
-    "bioanalytics",
-    "pharmacology",
-    "clinical development",
-    "omics",
-    "metabolomics",
-    "proteomics",
-    "genomics",
-    "disease biology",
-    "r&d",
-    "research",
-    "scientist",
-    "biology",
-    "therapeutic",
-    "clinical",
-    "pharmacodynamic",
+SCIENTIFIC_RELEVANCE_PATTERNS: tuple[tuple[str, str], ...] = (
+    ("Discovery Research", r"\b(discovery research|drug discovery|early discovery|target discovery)\b"),
+    ("Translational Research", r"\b(translational research|translational science|translational medicine)\b"),
+    ("Biomarkers", r"\b(biomarker|biomarkers|pharmacodynamic biomarker|clinical biomarker)\b"),
+    ("Pharmacology", r"\b(pharmacology|pharmacodynamic|pharmacokinetic|pk/pd)\b"),
+    ("Clinical Development", r"\b(clinical development|clinical trial|clinical trials|clinical study|clinical studies)\b"),
+    ("Bioanalytics", r"\b(bioanalytical|bioanalytics|bioanalysis|bioanalytical sciences)\b"),
+    ("Omics", r"\b(omics|metabolomics|proteomics|genomics|transcriptomics|lipidomics)\b"),
+    ("Disease Biology", r"\b(disease biology|biology|immunology|oncology|neuroscience|metabolism|respiratory biology)\b"),
 )
 
 ORGANIZATIONAL_FIT_KEYWORDS = (
@@ -72,6 +61,13 @@ ORGANIZATIONAL_FIT_KEYWORDS = (
 
 SenderFields = dict[str, str]
 FitLevel = Literal["High", "Medium", "Low"]
+
+
+class ScientificRelevance(NamedTuple):
+    """Deterministic scientific relevance gate based only on explicit profile text."""
+
+    is_relevant: bool
+    evidence: tuple[str, ...]
 
 
 def clean_filename(value: str) -> str:
@@ -106,6 +102,40 @@ def row_to_markdown(contact: pd.Series) -> str:
     return "\n".join(lines)
 
 
+def assess_scientific_relevance(contact: pd.Series) -> ScientificRelevance:
+    """Return explicit profile signals that earn scientific relevance claims."""
+    evidence: list[str] = []
+    for field, value in contact.items():
+        if pd.isna(value) or str(value).strip() == "":
+            continue
+        display_value = str(value).strip()
+        for label, pattern in SCIENTIFIC_RELEVANCE_PATTERNS:
+            if re.search(pattern, display_value, flags=re.IGNORECASE):
+                evidence.append(f"{label}: {field} = {display_value}")
+                break
+    return ScientificRelevance(bool(evidence), tuple(dict.fromkeys(evidence)))
+
+
+def format_scientific_relevance_report(assessment: ScientificRelevance) -> str:
+    """Format the relevance gate as a visible markdown field for reports and prompts."""
+    evidence_lines = "\n".join(f"   - {item}" for item in assessment.evidence)
+    if not evidence_lines:
+        evidence_lines = "   - None"
+    return (
+        "Scientific Relevance:\n"
+        f"- Scientific Relevance: {'TRUE' if assessment.is_relevant else 'FALSE'}\n"
+        "- Evidence:\n"
+        f"{evidence_lines}"
+    )
+
+
+def attach_scientific_relevance(report: str, assessment: ScientificRelevance) -> str:
+    """Prepend the deterministic relevance gate without relying on model-generated evidence."""
+    if report.lstrip().lower().startswith("scientific relevance:"):
+        return report
+    return f"{format_scientific_relevance_report(assessment)}\n\n{report.strip()}"
+
+
 def build_report_prompt(contact: pd.Series) -> str:
     """Create a prompt for Metabolon-focused contact intelligence."""
     return f"""
@@ -113,7 +143,7 @@ Create a concise, reusable contact intelligence report from the structured conta
 
 Goal:
 Replicate the outreach style used by Andrew Noel at Metabolon. The report should identify the
-contact's scientific or business identity and select the most relevant Metabolon conversation.
+contact's scientific or business identity only when directly supported by the contact details.
 
 Use only the contact details provided. Do not use LinkedIn, Outlook, Gmail, web browsing, or any
 external enrichment. Do not claim facts that are not present in the data. If information is missing,
@@ -130,8 +160,8 @@ Extract and return:
 - Therapeutic area(s)
 - Top 10-20 recurring keywords
 - Scientific/business themes
-- Likely Metabolon-relevant interests
-- Recommended outreach angle
+- Likely Metabolon-relevant interests only when direct evidence exists
+- Recommended outreach angle only when direct scientific evidence exists
 
 Assign exactly one primary persona from this list:
 - Discovery Research
@@ -162,6 +192,11 @@ Select exactly one recommended outreach angle from this list:
 - Discovery Research Support
 - Portfolio Decision Support
 
+Before assigning relevance, determine whether the profile contains direct evidence of involvement in
+Discovery Research, Translational Research, Biomarkers, Pharmacology, Clinical Development,
+Bioanalytics, Omics, or Disease Biology. Do not treat portfolio, risk, strategy, operations, PMO,
+procurement, finance, legal, or leadership language as scientific relevance.
+
 Clearly separate observed facts from inferred themes. Inferences must be conservative and directly
 grounded in the provided contact data. Do not invent interests or priorities.
 
@@ -171,6 +206,9 @@ Return markdown with exactly these sections:
    - Inferred Themes
    - Primary Persona
    - Recommended Outreach Angle
+2. Scientific Relevance
+   - Scientific Relevance: TRUE or FALSE
+   - Evidence: exact profile signals used, or None
 
 Contact details:
 {row_to_markdown(contact)}
@@ -183,6 +221,7 @@ def build_email_prompt(
     first_name: str,
     fit: FitLevel,
     fit_reason: str,
+    scientific_relevance: ScientificRelevance,
     sender: SenderFields,
 ) -> str:
     """Create an Andrew Noel-style outreach email based on a saved report."""
@@ -198,13 +237,14 @@ Sender context:
 Recipient first name for greeting: {greeting_name}
 Fit classification: {fit}
 Reason for fit: {fit_reason}
+{format_scientific_relevance_report(scientific_relevance)}
 
 Relevance discipline:
-- Treat High as direct scientific relevance. This requires clear evidence of discovery, translational,
-  biomarkers, pharmacology, clinical development, omics, disease biology, or bioanalytics work.
-- Treat Medium as organizational relevance only. Examples include portfolio, operations, PMO, risk
-  management, procurement, strategy, finance, or legal.
-- Treat Low as unknown relevance because evidence is insufficient.
+- Scientific Relevance must be earned before any scientific relevance claim is allowed.
+- Scientific Relevance TRUE requires exact evidence listed above for Discovery Research, Translational
+  Research, Biomarkers, Pharmacology, Clinical Development, Bioanalytics, Omics, or Disease Biology.
+- Scientific Relevance FALSE means the goal is referral discovery, not scientific selling.
+- The email may only use scientific evidence explicitly listed above.
 
 Contact details:
 {row_to_markdown(contact)}
@@ -213,7 +253,9 @@ Requirements:
 - Output exactly these markdown sections:
   1. Fit Classification
   2. Reason for Fit
-  3. Generated Outreach Email
+  3. Scientific Relevance
+  4. Evidence
+  5. Generated Outreach Email
 - The email body must be 80-150 words.
 - Start with "Good morning {greeting_name}," or "Dear {greeting_name},". Never start with "Hello," alone.
 - Include this introduction concept without hardcoding anyone else: "My name is {sender['name']}, and I support {sender['account']} as {sender['title']} at {sender['company']}."
@@ -225,16 +267,21 @@ Requirements:
   cost savings, or decision-grade evidence unless those facts are explicitly present in the data.
 
 Behavior by fit:
-- High: write a specific scientific outreach email grounded in the observed role/focus.
-- Medium: write an organizational-relevance email only. Briefly introduce Metabolon, state that you
-  noticed the recipient's organizational leadership role, and ask whether they can point you to
-  colleagues closer to translational research, biomarkers, discovery, pharmacology, or clinical
-  development. Do NOT claim Metabolon solves that person's problem. Do NOT infer scientific needs,
-  portfolio decision support, risk reduction, or strategic decision-making benefits.
-- Low: write a very short general introduction only and ask for guidance to the right colleague.
-  Never invent a specialized scientific angle for a low-fit contact.
+- If Scientific Relevance is TRUE: write a specific scientific outreach email grounded only in the
+  exact evidence listed above.
+- If Scientific Relevance is FALSE: write a simple introduction only. Acknowledge the role, introduce
+  the sender, briefly describe Metabolon as having capabilities in metabolomics and biomarker support
+  for pharmaceutical R&D organizations, and ask whether there are colleagues closer to translational
+  research, biomarkers, discovery, pharmacology, clinical development, or omics activities. Do NOT
+  propose a specific Metabolon use case. Do NOT claim Metabolon solves that person's problem. Do NOT
+  infer scientific needs, portfolio decision support, risk reduction, or strategic decision-making
+  benefits.
 
-Forbidden for Medium or Low fit:
+Forbidden when Scientific Relevance is FALSE:
+- Do not propose a specific Metabolon use case.
+- Do not mention pathway biology, disease biology, translational research needs, biomarker needs,
+  pharmacology support, clinical development support, portfolio decision support, risk reduction,
+  strategic decision making, risk evaluation, or portfolio decisions.
 - Do not say Metabolon can support risk management, improve portfolio decisions, reduce development
   risk, strengthen strategic decision making, improve operations, lower costs, or solve procurement,
   finance, legal, strategy, PMO, or operational problems.
@@ -246,9 +293,8 @@ My name is [Sender Name], and I support [Account] as [Sender Title] at [Sender C
 
 Given your [role/focus], I thought it could be useful to connect.
 
-For High fit only, one short paragraph explaining the relevant Metabolon scientific capability.
-For Medium fit, do not include a capability claim; ask for guidance to a more scientifically aligned colleague.
-For Low fit, keep the introduction very short and general.
+Only when Scientific Relevance is TRUE, one short paragraph explaining the relevant Metabolon scientific capability.
+When Scientific Relevance is FALSE, do not include a capability claim beyond the brief company description; ask for guidance to a more scientifically aligned colleague.
 
 Brief invitation to connect or guidance to the right colleague.
 
@@ -257,6 +303,7 @@ Sign-off with sender name and title.
 Saved intelligence report:
 {report}
 """.strip()
+
 
 def generate_text(prompt: str, model: str) -> str:
     """Generate text using the OpenAI Responses API."""
@@ -300,44 +347,36 @@ def get_contact_first_name(contact: pd.Series, name_column: str) -> str:
 
 
 def classify_contact_fit(contact: pd.Series, report: str = "") -> tuple[FitLevel, str]:
-    """Classify whether outreach relevance is scientific, organizational, or unknown."""
+    """Classify outreach fit from explicit contact evidence only."""
+    assessment = assess_scientific_relevance(contact)
     contact_text = row_to_markdown(contact).lower()
-    report_text = report.lower()
-    combined_text = f"{contact_text}\n{report_text}"
-    contact_scientific_matches = [keyword for keyword in SCIENTIFIC_FIT_KEYWORDS if keyword in contact_text]
-    report_scientific_matches = [keyword for keyword in SCIENTIFIC_FIT_KEYWORDS if keyword in report_text]
     organizational_matches = [keyword for keyword in ORGANIZATIONAL_FIT_KEYWORDS if keyword in contact_text]
 
-    if contact_scientific_matches:
+    if assessment.is_relevant:
         return (
             "High",
-            "Direct scientific relevance is present in the contact data: "
-            + ", ".join(contact_scientific_matches[:4])
-            + ".",
+            "Scientific Relevance = TRUE. Exact evidence: " + "; ".join(assessment.evidence) + ".",
         )
     if organizational_matches:
         return (
             "Medium",
-            "Organizational relevance is present, but no direct discovery, translational, biomarker, "
-            "pharmacology, clinical development, omics, disease biology, or bioanalytics role is shown: "
+            "Scientific Relevance = FALSE. Organizational role signals are present, but no direct "
+            "Discovery Research, Translational Research, Biomarkers, Pharmacology, Clinical Development, "
+            "Bioanalytics, Omics, or Disease Biology evidence is shown. Organizational signals: "
             + ", ".join(organizational_matches[:4])
             + ".",
         )
-    if report_scientific_matches and not organizational_matches:
-        return (
-            "High",
-            "Direct scientific relevance is present in the saved report: "
-            + ", ".join(report_scientific_matches[:4])
-            + ".",
-        )
-    if any(keyword in combined_text for keyword in ("pharma", "biotech", "life science", "medical")):
+    if any(keyword in contact_text for keyword in ("pharma", "biotech", "life science", "medical")):
         return (
             "Medium",
-            "Only broad organizational or industry relevance is present; no direct scientific role is shown.",
+            "Scientific Relevance = FALSE. Only broad organizational or industry relevance is present; "
+            "no direct scientific role is shown.",
         )
     return (
         "Low",
-        "Unknown relevance: the provided contact data has insufficient evidence of direct scientific or organizational relevance.",
+        "Scientific Relevance = FALSE. The provided contact data has insufficient direct evidence of "
+        "Discovery Research, Translational Research, Biomarkers, Pharmacology, Clinical Development, "
+        "Bioanalytics, Omics, or Disease Biology involvement.",
     )
 
 
@@ -495,7 +534,9 @@ def main() -> None:
 
         with st.spinner("Generating report with OpenAI..."):
             try:
-                report = generate_text(build_report_prompt(selected_contact), model.strip())
+                scientific_relevance = assess_scientific_relevance(selected_contact)
+                generated_report = generate_text(build_report_prompt(selected_contact), model.strip())
+                report = attach_scientific_relevance(generated_report, scientific_relevance)
                 report_path = save_markdown(selected_name, report, "report")
             except OpenAIError as exc:
                 st.error(f"OpenAI request failed: {exc}")
@@ -527,6 +568,7 @@ def main() -> None:
 
             with st.spinner("Generating outreach email with OpenAI..."):
                 try:
+                    scientific_relevance = assess_scientific_relevance(selected_contact)
                     fit, fit_reason = classify_contact_fit(selected_contact, st.session_state.report)
                     email = generate_text(
                         build_email_prompt(
@@ -535,6 +577,7 @@ def main() -> None:
                             selected_first_name,
                             fit,
                             fit_reason,
+                            scientific_relevance,
                             sender,
                         ),
                         model.strip(),
