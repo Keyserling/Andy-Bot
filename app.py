@@ -254,7 +254,8 @@ Input:
 - Optional company/account context
 
 Task:
-Generate a highly personalized B2B life-sciences outreach email for Metabolon.
+Generate a plain-spoken B2B life-sciences outreach email for Metabolon.
+Write like an experienced scientist or biotech account manager sending a real email at 07:30 in the morning.
 
 Critical principle:
 The email must be driven by the prospect's LinkedIn content, not by a generic Metabolon pitch.
@@ -311,6 +312,8 @@ Required email shape:
 - Never use the shape observation → question → pitch → meeting.
 - Do not ask generic consulting questions.
 - Make a concrete observation and a hypothesis instead of opening with a question.
+- Use normal spoken business English, not conference-booth language.
+- Include at least one sentence that sounds like a real human observation rather than business language.
 
 Hard rules:
 - 90-130 words.
@@ -347,12 +350,23 @@ Hard rules:
   actionable insights
   complex therapeutic areas
   robust scalable
+  resonates with
+  recent trends
+  productive conversation
+  potential intersections
+  explore opportunities
+  relevant to your programs
+  in this space
+  valuable discussion
+  interesting overlap
+  complementary approach
   scientific insights
+  biological response
+  pathway activity
 
 Metabolon sentence rule:
 Metabolon may appear in only one sentence.
-That sentence must be modest and specific, for example:
-"At Metabolon, we sometimes see metabolomics help clarify pathway activity or biological response when conventional biomarker readouts leave open questions."
+That sentence must be modest and specific and must not use any forbidden terms.
 
 Quality gate:
 Before returning the email, silently check:
@@ -360,8 +374,9 @@ Before returning the email, silently check:
 2. Does it sound like a vendor template?
 3. Is the LinkedIn hook vague?
 4. Does the pitch arrive before the recipient's world is established?
+5. Could any sentence appear in a pharma conference brochure?
 
-If yes to any, rewrite once.
+If yes to any, rewrite once. If a sentence could appear in a pharma conference brochure, delete it.
 
 Output only:
 Subject:
