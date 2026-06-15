@@ -5,23 +5,27 @@ Andy Bot is a Streamlit app for generating varied persona-based Metabolon outrea
 ## Workflow
 
 1. Upload a CSV or Excel contact list.
-2. Andy Bot classifies every contact into exactly one of six active personas:
+2. Andy Bot classifies every contact into exactly one explicit persona using ordered routing rules and returns a confidence score:
+   - Clinical Biomarkers
+   - Computational Biology
    - Discovery
-   - Translational / Clinical Development
-   - Biomarkers / Bioanalysis
+   - Clinical Pharmacology
    - Medical Affairs
-   - Safety / Quality
+   - Immunology
    - Oncology
-3. It randomly selects one of ten subject lines and one of ten complete narrative paragraphs for that persona.
+   - Safety / Quality
+   - Translational / Clinical Development
+3. It randomly selects one of ten subject lines and one of ten complete narrative paragraphs for the matching narrative family.
 4. It generates and exports a table with one row per contact:
    - Name
    - Company
    - Persona
+   - Persona Confidence Score
    - Subject
    - Email
    - narrative_variant_id
 
-Generated emails keep the existing upload/import workflow and persona classification logic, with legacy persona matches mapped into the six active personas. The email body uses a fixed greeting, Helmut von Keyserling introduction, one selected narrative paragraph, the requested relevance sentence, and Helmut's signature.
+Generated emails keep the existing upload/import workflow. Explicit persona labels such as Clinical Biomarkers, Clinical Pharmacology, Computational Biology, and Immunology are preserved in the export, while related legacy or specialist labels are mapped to the closest available narrative family for email copy. Medical Affairs is routed only by an explicit `medical affairs` match. The email body uses a fixed greeting, Helmut von Keyserling introduction, one selected narrative paragraph, the requested relevance sentence, and Helmut's signature.
 
 ## Setup
 
