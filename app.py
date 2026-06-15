@@ -393,6 +393,30 @@ COMPANY_SUFFIXES = (
     "bv",
 )
 
+COMMON_PHARMA_COMPANY_DOMAINS = {
+    "abbvie": ("abbvie.com",),
+    "astrazeneca": ("astrazeneca.com",),
+    "bayer": ("bayer.com",),
+    "boehringer ingelheim": ("boehringer-ingelheim.com",),
+    "bristol myers squibb": ("bms.com",),
+    "eli lilly": ("lilly.com",),
+    "gilead": ("gilead.com",),
+    "glaxosmithkline": ("gsk.com",),
+    "johnson johnson": ("jnj.com",),
+    "merck": ("merck.com", "msd.com"),
+    "novartis": ("novartis.com",),
+    "pfizer": ("pfizer.com",),
+    "roche": ("roche.com",),
+    "sanofi": ("sanofi.com",),
+    "takeda": ("takeda.com",),
+}
+
+DOMAIN_TO_COMMON_PHARMA_COMPANY = {
+    domain: company
+    for company, domains in COMMON_PHARMA_COMPANY_DOMAINS.items()
+    for domain in domains
+}
+
 
 def extract_email_domain(email: str) -> str:
     """Return a normalized domain from an email address, or an empty string."""
@@ -407,27 +431,60 @@ def normalize_company_name(company: str) -> str:
     return " ".join(tokens)
 
 
+def domain_to_company_key(domain: str) -> str:
+    """Return a normalized company key for a known or obvious email domain."""
+    if not domain or domain in FREE_EMAIL_DOMAINS:
+        return ""
+    if domain in DOMAIN_TO_COMMON_PHARMA_COMPANY:
+        return DOMAIN_TO_COMMON_PHARMA_COMPANY[domain]
+    for known_domain, company in DOMAIN_TO_COMMON_PHARMA_COMPANY.items():
+        if domain.endswith(f".{known_domain}"):
+            return company
+    domain_root = domain.split(".")[0]
+    return normalize_company_name(domain_root)
+
+
+def company_to_common_pharma_key(company: str) -> str:
+    """Map common pharma company variants to their canonical integrity key."""
+    company_key = normalize_company_name(company)
+    compact_company_key = company_key.replace(" ", "")
+    for common_company in COMMON_PHARMA_COMPANY_DOMAINS:
+        compact_common_company = common_company.replace(" ", "")
+        if (
+            compact_common_company
+            and compact_company_key
+            and (
+                compact_common_company in compact_company_key
+                or compact_company_key in compact_common_company
+            )
+        ):
+            return common_company
+    return company_key
+
+
+def company_keys_match(first_key: str, second_key: str) -> bool:
+    """Return whether two normalized company keys clearly match."""
+    compact_first = first_key.replace(" ", "")
+    compact_second = second_key.replace(" ", "")
+    return bool(
+        compact_first
+        and compact_second
+        and (compact_first in compact_second or compact_second in compact_first)
+    )
+
+
 def company_matches_domain(company: str, domain: str) -> bool:
     """Return whether a company name appears to match an email domain."""
-    if not company or not domain or domain in FREE_EMAIL_DOMAINS:
-        return False
-    company_key = normalize_company_name(company).replace(" ", "")
-    domain_key = normalize_company_name(domain.split(".")[0]).replace(" ", "")
-    return bool(
-        company_key
-        and domain_key
-        and (company_key in domain_key or domain_key in company_key)
+    return company_keys_match(
+        company_to_common_pharma_key(company), domain_to_company_key(domain)
     )
 
 
 def company_matches_company(company: str, linkedin_company: str) -> bool:
     """Return whether the uploaded company and LinkedIn company match."""
-    company_key = normalize_company_name(company).replace(" ", "")
-    linkedin_key = normalize_company_name(linkedin_company).replace(" ", "")
-    return bool(
-        company_key
-        and linkedin_key
-        and (company_key in linkedin_key or linkedin_key in company_key)
+    return company_keys_match(
+        company_to_common_pharma_key(company),
+        company_to_common_pharma_key(linkedin_company),
     )
 
 
@@ -452,10 +509,24 @@ def validate_contact_integrity(
 ) -> ContactIntegrity:
     """Validate contact/company consistency before email generation."""
     domain = extract_email_domain(email)
-    email_matches = company_matches_domain(company, domain)
-    linkedin_matches = company_matches_company(company, linkedin_company)
+    company_key = company_to_common_pharma_key(company)
+    email_company_key = domain_to_company_key(domain)
+    linkedin_company_key = company_to_common_pharma_key(linkedin_company)
+    email_matches = company_keys_match(company_key, email_company_key)
+    linkedin_matches = company_keys_match(company_key, linkedin_company_key)
+    linkedin_matches_email = company_keys_match(email_company_key, linkedin_company_key)
     email_known = bool(domain and domain not in FREE_EMAIL_DOMAINS)
     linkedin_known = bool(linkedin_company)
+    email_conflicts = bool(
+        email_known
+        and company_key
+        and email_company_key
+        and not email_matches
+        and (
+            company_key in COMMON_PHARMA_COMPANY_DOMAINS
+            or email_company_key in COMMON_PHARMA_COMPANY_DOMAINS
+        )
+    )
 
     if has_multiple_current_employers(linkedin_company):
         return ContactIntegrity(
@@ -466,25 +537,22 @@ def validate_contact_integrity(
             "RED", "Recent employer change detected.", linkedin_company, linkedin_title
         )
 
-    if email_known and linkedin_known and not email_matches and not linkedin_matches:
-        suggested_company = linkedin_company or domain.split(".")[0].title()
-        return ContactIntegrity(
-            "RED",
-            f"Company mismatch. Email and LinkedIn indicate {suggested_company}.",
-            suggested_company,
-            linkedin_title,
-        )
-    if email_known and not email_matches and not linkedin_known:
+    if email_conflicts:
         return ContactIntegrity(
             "RED",
             "Email domain conflicts with company.",
-            domain.split(".")[0].title(),
+            email_company_key.title() or domain.split(".")[0].title(),
             linkedin_title,
         )
-    if email_matches and linkedin_known and not linkedin_matches:
+    if (
+        email_matches
+        and linkedin_known
+        and not linkedin_matches
+        and not linkedin_matches_email
+    ):
         return ContactIntegrity(
             "RED",
-            "LinkedIn company conflicts with company.",
+            "LinkedIn company conflicts with company and email domain.",
             linkedin_company,
             linkedin_title,
         )
@@ -496,10 +564,10 @@ def validate_contact_integrity(
             linkedin_title,
         )
 
-    if email_matches and not linkedin_known:
+    if email_matches:
         return ContactIntegrity(
-            "YELLOW",
-            "Missing LinkedIn company; company cannot be fully confirmed.",
+            "GREEN",
+            "Company confirmed by email domain.",
             company,
             linkedin_title,
         )
