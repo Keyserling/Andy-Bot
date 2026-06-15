@@ -8,16 +8,15 @@ Andy Bot is a Streamlit app for generating persona-template Metabolon outreach f
 2. Andy Bot classifies every contact into exactly one persona:
    - Discovery
    - Translational Research
-   - Clinical Development
    - Clinical Biomarkers
-   - Bioanalysis
+   - Clinical Development
    - Medical Affairs
-   - Epidemiology
-   - Safety / Risk
+   - Oncology
+   - Immunology
+   - Safety/Risk
+   - Bioanalysis
    - Computational Biology
-   - Oncology Research
-   - Immunology Research
-3. It selects the matching Metabolon narrative for that persona.
+3. It selects the matching Metabolon email template for that persona.
 4. It generates and exports a table with one row per contact:
    - Name
    - Company
@@ -25,7 +24,7 @@ Andy Bot is a Streamlit app for generating persona-template Metabolon outreach f
    - Subject
    - Email
 
-Generated emails are constrained to 80-140 words, start with `Dear FirstName,`, use simple scientifically relevant language, and include a brief meeting request. The app does not generate LinkedIn profile analysis, long reports, contact intelligence reports, why-this-person outputs, or confidence scores.
+Generated emails are deterministic template output. Each email starts with `Dear FirstName,`, introduces Helmut von Keyserling as Strategic Account Manager at Metabolon, includes a persona-specific Metabolon use case paragraph, asks for a brief 20-minute conversation, and closes with Helmut von Keyserling's signature. The app does not use creative free-writing, fake flattery, over-personalization, LinkedIn profile analysis, long reports, contact intelligence reports, why-this-person outputs, or confidence scores.
 
 ## Setup
 
@@ -35,11 +34,7 @@ Install the runtime dependencies before running the app:
 pip install -r requirements.txt
 ```
 
-Create a local environment file from the example and add your OpenAI API key:
-
-```bash
-cp .env.example .env
-```
+No OpenAI API key is required because generated emails come from local templates.
 
 ## Run the app
 
