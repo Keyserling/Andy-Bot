@@ -17,6 +17,7 @@ import pandas as pd
 import streamlit as st
 
 from draft_exports import CSVDraftProvider, EMLDraftProvider
+from metabolon_knowledge import MetabolonStory, recommend_metabolon_story
 from narratives import get_narrative_set
 
 OLD_TO_NEW_PERSONA = {
@@ -25,8 +26,6 @@ OLD_TO_NEW_PERSONA = {
     "Clinical Biomarkers": "Biomarkers / Bioanalysis",
     "Bioanalysis": "Biomarkers / Bioanalysis",
     "Safety/Risk": "Safety / Quality",
-    "Immunology": "Discovery",
-    "Computational Biology": "Discovery",
 }
 
 PERSONA_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -203,6 +202,10 @@ class ContactOutreach(NamedTuple):
     email: str
     matched_keyword: str
     narrative_variant_id: str
+    metabolon_capability: str
+    recommended_offering: str
+    scientific_problem: str
+    email_story: str
 
 
 def find_column(dataframe: pd.DataFrame, candidates: tuple[str, ...]) -> str | None:
@@ -648,6 +651,34 @@ def identify_persona(contact: pd.Series, role_columns: list[str]) -> str:
     return classify_persona(contact, role_columns).persona
 
 
+def _story_persona(persona: str, story: MetabolonStory) -> str:
+    """Choose the narrative library persona from the recommended Metabolon story."""
+    if story.recommended_offering == "Bioinformatics / Multiomics Software":
+        return "Discovery"
+    if story.recommended_offering == "Lipidomics":
+        return "Immunology" if "Immunology" in get_narrative_personas() else "Discovery"
+    if (
+        story.recommended_offering == "Biopharma Services"
+        and persona == "Clinical Pharmacology"
+    ):
+        return "Clinical Pharmacology"
+    if story.recommended_offering == "Global Discovery Panel" and persona in (
+        "Oncology",
+        "Safety / Quality",
+    ):
+        return persona
+    if persona in get_narrative_personas():
+        return persona
+    return "Discovery"
+
+
+def get_narrative_personas() -> tuple[str, ...]:
+    """Return supported narrative personas without exposing library internals here."""
+    from narratives import PERSONAS
+
+    return PERSONAS
+
+
 def build_email(
     name: str,
     company: str,
@@ -658,6 +689,8 @@ def build_email(
     source_first_name: str = "",
     used_emails: set[str] | None = None,
     integrity: ContactIntegrity | None = None,
+    title: str = "",
+    therapeutic_area: str = "",
 ) -> ContactOutreach:
     """Build outreach from one random subject and one persona-specific use case."""
     integrity = integrity or ContactIntegrity(
@@ -680,6 +713,10 @@ def build_email(
             "Review Required",
             matched_keyword,
             "REVIEW-REQUIRED",
+            "",
+            "",
+            "",
+            "",
         )
     active_persona = map_persona(persona)
     if active_persona == "Operations / Low Priority":
@@ -697,9 +734,17 @@ def build_email(
             "Review manually",
             matched_keyword,
             "MANUAL-REVIEW",
+            "",
+            "",
+            "",
+            "",
         )
 
-    variant_set = get_narrative_set(active_persona)
+    metabolon_story = recommend_metabolon_story(
+        active_persona, title, therapeutic_area, matched_keyword
+    )
+    narrative_persona = _story_persona(active_persona, metabolon_story)
+    variant_set = get_narrative_set(narrative_persona)
     used_emails = used_emails if used_emails is not None else set()
 
     use_case_options = list(enumerate(variant_set["use_cases"], start=1))
@@ -707,7 +752,7 @@ def build_email(
     random.shuffle(use_case_options)
     random.shuffle(subject_options)
 
-    persona_label = active_persona.lower()
+    persona_label = narrative_persona.lower()
     benefits = "\n".join(f"• {benefit}" for benefit in variant_set["benefits"])
 
     for use_case_index, use_case in use_case_options:
@@ -718,10 +763,10 @@ def build_email(
                 "My name is Helmut von Keyserling, and I support "
                 f"{company_text} as Strategic Account Manager at Metabolon.\n\n"
                 f"Many {persona_label} teams are using metabolomics to {use_case}.\n\n"
+                f"For this contact, the best Metabolon angle is {metabolon_story.recommended_offering}: "
+                f"{metabolon_story.scientific_problem}.\n\n"
                 f"This type of data can help:\n{benefits}\n\n"
-                "Metabolon generates deep quantitative metabolomics datasets that help "
-                f"{persona_label} teams interpret functional biology beyond traditional "
-                "assays/readouts.\n\n"
+                f"{metabolon_story.email_story}\n\n"
                 "If this is of interest, I would be happy to briefly introduce our approach "
                 "and learn how your team is thinking about this area.\n\n"
                 "Best regards,\n\n"
@@ -747,6 +792,10 @@ def build_email(
                     email,
                     matched_keyword,
                     variant_id,
+                    metabolon_story.primary_capability,
+                    metabolon_story.recommended_offering,
+                    metabolon_story.scientific_problem,
+                    metabolon_story.email_story,
                 )
 
     raise ValueError(
@@ -790,6 +839,10 @@ def empty_output_table() -> pd.DataFrame:
             "Email",
             "Matched Keyword",
             "Narrative Variant ID",
+            "Metabolon Capability",
+            "Recommended Offering",
+            "Scientific Problem",
+            "Email Story",
         ]
     )
 
@@ -849,6 +902,8 @@ def generate_outreach_table(contacts: pd.DataFrame) -> pd.DataFrame:
                 source_first_name,
                 used_emails,
                 integrity,
+                linkedin_title or row_to_text(contact, role_columns),
+                row_to_text(contact),
             )
         )
         progress.progress(
@@ -873,6 +928,10 @@ def generate_outreach_table(contacts: pd.DataFrame) -> pd.DataFrame:
             "Email",
             "Matched Keyword",
             "Narrative Variant ID",
+            "Metabolon Capability",
+            "Recommended Offering",
+            "Scientific Problem",
+            "Email Story",
         ],
     )
 

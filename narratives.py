@@ -9,6 +9,7 @@ PERSONAS = (
     "Clinical Pharmacology",
     "Medical Affairs",
     "Safety / Quality",
+    "Immunology",
     "Oncology",
 )
 
@@ -197,6 +198,38 @@ NARRATIVE_LIBRARY = {
             "investigate safety findings with quantitative metabolite data",
             "compare treatment, control, product, or process groups",
             "support risk assessment and follow-up study design",
+        ),
+    },
+
+    "Immunology": {
+        "subjects": (
+            "Metabolomics for immunology studies at {company}",
+            "Metabolomics for inflammation biology at {company}",
+            "Metabolomics for immune response work at {company}",
+            "Metabolomics for immunology biomarkers at {company}",
+            "Metabolomics for immune-metabolic biology at {company}",
+            "Metabolomics for inflammatory disease at {company}",
+            "Metabolomics for immunology development at {company}",
+            "Metabolomics for patient stratification at {company}",
+            "Metabolomics for treatment response in immunology at {company}",
+            "Metabolomics for translational immunology at {company}",
+        ),
+        "use_cases": (
+            "study inflammatory pathway biology in patient samples",
+            "compare immune-metabolic signals across cohorts",
+            "evaluate lipid-mediated inflammation and treatment response",
+            "identify baseline biology linked to response",
+            "support patient stratification in inflammatory disease",
+            "connect immune biology with metabolite-level evidence",
+            "interpret on-treatment changes in clinical samples",
+            "compare responder and non-responder biology",
+            "study cardiometabolic or obesity-related inflammatory signals",
+            "prioritize follow-up biomarkers for immunology programs",
+        ),
+        "benefits": (
+            "interpret inflammatory and immune-metabolic pathway activity",
+            "compare patient subgroups using quantitative metabolite data",
+            "support response, stratification, and biomarker hypotheses",
         ),
     },
     "Oncology": {

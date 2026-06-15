@@ -10,6 +10,7 @@ from zipfile import ZipFile
 import pandas as pd
 
 from app import build_email, classify_persona, validate_contact_integrity
+from metabolon_knowledge import recommend_metabolon_story
 from draft_exports import EMLDraftProvider, SENDER_NOT_CONFIGURED_NOTE
 from narratives import NARRATIVE_LIBRARY, PERSONAS
 
@@ -30,8 +31,8 @@ def main() -> None:
     ]
     variant_ids = {contact.narrative_variant_id for contact in contacts}
 
-    if len(PERSONAS) != 7:
-        raise AssertionError(f"Expected 7 personas, found {len(PERSONAS)}")
+    if len(PERSONAS) != 8:
+        raise AssertionError(f"Expected 8 personas, found {len(PERSONAS)}")
 
     for persona in PERSONAS:
         narrative_set = NARRATIVE_LIBRARY[persona]
@@ -91,6 +92,71 @@ def main() -> None:
         raise AssertionError("Clinical Pharmacology should use its dedicated persona")
 
 
+    story_cases = (
+        (
+            "Frank Oellien",
+            "Computational Biology",
+            "Computational Drug Discovery",
+            "",
+            "drug discovery",
+            "Bioinformatics / Multiomics Software",
+        ),
+        (
+            "Max Eberle",
+            "Discovery",
+            "Principal Scientist Lab Head",
+            "",
+            "principal scientist",
+            "Global Discovery Panel",
+        ),
+        (
+            "Alex Phipps",
+            "Clinical Pharmacology",
+            "Clinical Pharmacology Oncology",
+            "Oncology",
+            "clinical pharmacology",
+            "Biopharma Services",
+        ),
+        (
+            "Hayato Yamazaki inflammation",
+            "Immunology",
+            "Immunology Clinical Development",
+            "inflammation",
+            "immunology",
+            "Lipidomics",
+        ),
+        (
+            "Hayato Yamazaki broad",
+            "Immunology",
+            "Immunology Clinical Development",
+            "autoimmune",
+            "immunology",
+            "Global Discovery Panel",
+        ),
+        (
+            "Zeljana Koletic",
+            "Safety / Quality",
+            "Risk Management",
+            "",
+            "risk management",
+            "Global Discovery Panel",
+        ),
+    )
+    for label, persona, title, therapeutic_area, matched_keyword, expected in story_cases:
+        story = recommend_metabolon_story(
+            persona, title, therapeutic_area, matched_keyword
+        )
+        if story.recommended_offering != expected:
+            raise AssertionError(
+                f"{label} expected {expected}, got {story.recommended_offering}"
+            )
+
+    operations_story = recommend_metabolon_story(
+        "Operations / Low Priority", "Process Excellence Lead", "", "process excellence"
+    )
+    if operations_story.recommended_offering:
+        raise AssertionError("Operations contacts must not receive an offering")
+
     integrity_cases = (
         ("Mario", "Bayer", "mario@bayer.com", "", "GREEN"),
         ("AbbVie exact", "AbbVie", "lead@abbvie.com", "", "GREEN"),
@@ -111,7 +177,8 @@ def main() -> None:
         "My name is Helmut von Keyserling, and I support ExampleCo as Strategic Account Manager at Metabolon.",
         "Many discovery teams are using metabolomics to ",
         "This type of data can help:",
-        "Metabolon generates deep quantitative metabolomics datasets that help discovery teams interpret functional biology beyond traditional assays/readouts.",
+        "For this contact, the best Metabolon angle is Global Discovery Panel",
+        "Metabolon can support generating broad biochemical evidence for target biology",
         "If this is of interest, I would be happy to briefly introduce our approach and learn how your team is thinking about this area.",
     )
     for required_line in required_lines:
