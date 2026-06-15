@@ -18,7 +18,6 @@ import streamlit as st
 
 from narratives import get_narrative_set
 
-
 OLD_TO_NEW_PERSONA = {
     "Translational Research": "Translational / Clinical Development",
     "Clinical Development": "Translational / Clinical Development",
@@ -32,14 +31,50 @@ OLD_TO_NEW_PERSONA = {
 
 PERSONA_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
-        "Clinical Biomarkers",
+        "Biomarkers / Bioanalysis",
         (
+            "regulated bioanalysis",
+            "translational biomarker",
+            "clinical biomarker",
+            "companion diagnostic",
+            "pd biomarker",
+            "pk/pd biomarker",
+            "biomarkers",
             "biomarker",
             "bioanalysis",
             "bioanalytical",
+            "assays",
             "assay",
-            "translational biomarker",
+            "glp",
+            "gclp",
             "biomarker strategy",
+        ),
+    ),
+    (
+        "Clinical Pharmacology",
+        (
+            "clinical pharmacology",
+            "exposure response",
+            "dose optimization",
+            "pharmacokinetics",
+            "pharmacodynamics",
+            "pk/pd",
+            "pharmacokinetic",
+            "pharmacodynamic",
+            "dmpk",
+        ),
+    ),
+    (
+        "Operations / Low Priority",
+        (
+            "process excellence",
+            "operational excellence",
+            "site contracting",
+            "clinical operations",
+            "study operations",
+            "quality systems",
+            "business process",
+            "portfolio operations",
         ),
     ),
     (
@@ -71,16 +106,6 @@ PERSONA_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "biology",
             "multiomics",
             "multi-omics",
-        ),
-    ),
-    (
-        "Clinical Pharmacology",
-        (
-            "clinical pharmacology",
-            "pk/pd",
-            "pharmacokinetic",
-            "pharmacodynamic",
-            "dmpk",
         ),
     ),
     (
@@ -127,13 +152,12 @@ PERSONA_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
         (
             "clinical development",
             "clinical trial",
-            "clinical operations",
             "clinical study",
             "clinical research",
             "development lead",
-            "translational",
             "translational medicine",
             "translational science",
+            "translational",
             "bench to bedside",
             "human biology",
         ),
@@ -147,10 +171,11 @@ def map_persona(persona: str) -> str:
 
 
 class PersonaClassification(NamedTuple):
-    """Persona classification and confidence for one contact."""
+    """Persona classification details for one contact."""
 
     persona: str
     confidence_score: float
+    matched_keyword: str
 
 
 class ContactOutreach(NamedTuple):
@@ -162,6 +187,7 @@ class ContactOutreach(NamedTuple):
     persona_confidence_score: float
     subject: str
     email: str
+    matched_keyword: str
     narrative_variant_id: str
 
 
@@ -234,14 +260,41 @@ def get_cell_value(contact: pd.Series, column: str | None, fallback: str) -> str
     return str(value).strip()
 
 
-def get_contact_first_name(name: str) -> str:
-    """Return the first name from a contact display name."""
+def find_first_name_column(dataframe: pd.DataFrame) -> str | None:
+    """Find an explicit first-name column in uploaded contact data."""
+    return find_column(
+        dataframe,
+        ("first name", "first_name", "firstname", "given name", "given_name"),
+    )
+
+
+def is_safe_first_name(first_name: str) -> bool:
+    """Return whether a first-name value is safe to use in a greeting."""
+    return (
+        bool(re.fullmatch(r"[^\W\d_](?:[^\W\d_]|[.'’\-])*", first_name, re.UNICODE))
+        and len(first_name) > 1
+    )
+
+
+def get_contact_first_name(name: str, source_first_name: str = "") -> str:
+    """Return a non-truncated Unicode first name from contact source data."""
+    for candidate in (source_first_name,):
+        candidate = candidate.strip()
+        if is_safe_first_name(candidate):
+            return candidate
+
     if name == "Unnamed Contact":
         return "Colleague"
 
     name_without_email = re.sub(r"<[^>]+>", "", name).strip()
-    name_parts = re.findall(r"[A-Za-z][A-Za-z'’-]*", name_without_email)
-    return name_parts[0] if name_parts else "Colleague"
+    name_without_parentheses = re.sub(r"\([^)]*\)", " ", name_without_email).strip()
+    name_parts = re.findall(
+        r"[^\W\d_](?:[^\W\d_]|[.'’\-])*", name_without_parentheses, re.UNICODE
+    )
+    if name_parts and is_safe_first_name(name_parts[0]):
+        return name_parts[0]
+
+    return "Colleague"
 
 
 def row_to_text(contact: pd.Series, columns: list[str] | None = None) -> str:
@@ -258,8 +311,8 @@ def row_to_text(contact: pd.Series, columns: list[str] | None = None) -> str:
 
 def pattern_matches(search_text: str, pattern: str) -> bool:
     """Return whether a persona pattern appears as a phrase or acronym."""
-    pattern_regex = rf"(?<![A-Za-z0-9]){re.escape(pattern)}(?![A-Za-z0-9])"
-    return re.search(pattern_regex, search_text) is not None
+    pattern_regex = rf"(?<![\w]){re.escape(pattern)}(?![\w])"
+    return re.search(pattern_regex, search_text, re.UNICODE) is not None
 
 
 def persona_confidence(match_count: int, role_match_count: int) -> float:
@@ -270,7 +323,9 @@ def persona_confidence(match_count: int, role_match_count: int) -> float:
     return round(min(score, 0.98), 2)
 
 
-def classify_persona(contact: pd.Series, role_columns: list[str]) -> PersonaClassification:
+def classify_persona(
+    contact: pd.Series, role_columns: list[str]
+) -> PersonaClassification:
     """Classify a contact into one explicit persona and return confidence."""
     role_text = " ".join(
         str(contact.get(column, ""))
@@ -288,10 +343,15 @@ def classify_persona(contact: pd.Series, role_columns: list[str]) -> PersonaClas
             1 for pattern in patterns if pattern_matches(search_text, pattern)
         )
         if all_match_count:
-            return PersonaClassification(
-                persona, persona_confidence(all_match_count, role_match_count)
+            matched_keyword = next(
+                pattern for pattern in patterns if pattern_matches(search_text, pattern)
             )
-    return PersonaClassification("Discovery", persona_confidence(0, 0))
+            return PersonaClassification(
+                persona,
+                persona_confidence(all_match_count, role_match_count),
+                matched_keyword,
+            )
+    return PersonaClassification("Discovery", persona_confidence(0, 0), "")
 
 
 def identify_persona(contact: pd.Series, role_columns: list[str]) -> str:
@@ -304,12 +364,26 @@ def build_email(
     company: str,
     persona: str,
     persona_confidence_score: float = 0.35,
+    matched_keyword: str = "",
+    source_first_name: str = "",
     used_emails: set[str] | None = None,
 ) -> ContactOutreach:
     """Build outreach from one random subject and one random narrative."""
-    first_name = get_contact_first_name(name)
+    first_name = get_contact_first_name(name, source_first_name)
     company_text = company or "your organization"
     active_persona = map_persona(persona)
+    if active_persona == "Operations / Low Priority":
+        return ContactOutreach(
+            name,
+            company,
+            active_persona,
+            persona_confidence_score,
+            "Review manually",
+            "Review manually",
+            matched_keyword,
+            "MANUAL-REVIEW",
+        )
+
     variant_set = get_narrative_set(active_persona)
     used_emails = used_emails if used_emails is not None else set()
 
@@ -333,7 +407,9 @@ def build_email(
             )
             if email not in used_emails:
                 used_emails.add(email)
-                variant_id = f"{active_persona}-{narrative_index:02d}-S{subject_index:02d}"
+                variant_id = (
+                    f"{active_persona}-{narrative_index:02d}-S{subject_index:02d}"
+                )
                 return ContactOutreach(
                     name,
                     company,
@@ -341,6 +417,7 @@ def build_email(
                     persona_confidence_score,
                     subject,
                     email,
+                    matched_keyword,
                     variant_id,
                 )
 
@@ -378,7 +455,8 @@ def empty_output_table() -> pd.DataFrame:
             "Persona Confidence Score",
             "Subject",
             "Email",
-            "narrative_variant_id",
+            "Matched Keyword",
+            "Narrative Variant ID",
         ]
     )
 
@@ -401,6 +479,7 @@ def generate_outreach_table(contacts: pd.DataFrame) -> pd.DataFrame:
         raise ValueError("Could not find any columns in the uploaded file.")
 
     company_column = find_company_column(contacts)
+    first_name_column = find_first_name_column(contacts)
     role_columns = find_role_columns(contacts)
     rows: list[ContactOutreach] = []
     used_emails: set[str] = set()
@@ -410,6 +489,7 @@ def generate_outreach_table(contacts: pd.DataFrame) -> pd.DataFrame:
     for position, (_, contact) in enumerate(contacts.iterrows(), start=1):
         name = get_cell_value(contact, name_column, "Unnamed Contact")
         company = get_cell_value(contact, company_column, "")
+        source_first_name = get_cell_value(contact, first_name_column, "")
         classification = classify_persona(contact, role_columns)
         rows.append(
             build_email(
@@ -417,6 +497,8 @@ def generate_outreach_table(contacts: pd.DataFrame) -> pd.DataFrame:
                 company,
                 classification.persona,
                 classification.confidence_score,
+                classification.matched_keyword,
+                source_first_name,
                 used_emails,
             )
         )
@@ -435,7 +517,8 @@ def generate_outreach_table(contacts: pd.DataFrame) -> pd.DataFrame:
             "Persona Confidence Score",
             "Subject",
             "Email",
-            "narrative_variant_id",
+            "Matched Keyword",
+            "Narrative Variant ID",
         ],
     )
 
@@ -463,7 +546,9 @@ def main() -> None:
     ):
         try:
             contacts = read_contacts(uploaded_file)
-        except Exception as exc:  # pandas parsing errors vary by file content and version
+        except (
+            Exception
+        ) as exc:  # pandas parsing errors vary by file content and version
             st.error(f"Could not read contacts file: {exc}")
             return
 
@@ -498,6 +583,45 @@ def main() -> None:
         st.dataframe(
             st.session_state.generated_emails, use_container_width=True, hide_index=True
         )
+        st.subheader("Processing Summary")
+        summary_table = st.session_state.generated_emails
+        st.write(f"Contacts processed: {len(summary_table)}")
+        st.write("Persona distribution")
+        st.dataframe(
+            summary_table["Persona"]
+            .value_counts()
+            .rename_axis("Persona")
+            .reset_index(name="Contacts"),
+            use_container_width=True,
+            hide_index=True,
+        )
+        low_confidence = summary_table[summary_table["Persona Confidence Score"] < 0.75]
+        operations = summary_table[
+            summary_table["Persona"] == "Operations / Low Priority"
+        ]
+        st.write(f"Low-confidence contacts (<0.75): {len(low_confidence)}")
+        if not low_confidence.empty:
+            st.dataframe(
+                low_confidence[
+                    [
+                        "Name",
+                        "Company",
+                        "Persona",
+                        "Persona Confidence Score",
+                        "Matched Keyword",
+                    ]
+                ],
+                use_container_width=True,
+                hide_index=True,
+            )
+        st.write(f"Operations / Low Priority contacts: {len(operations)}")
+        if not operations.empty:
+            st.dataframe(
+                operations[["Name", "Company", "Persona", "Matched Keyword"]],
+                use_container_width=True,
+                hide_index=True,
+            )
+
         st.download_button(
             "Export all emails as CSV",
             data=st.session_state.generated_emails.to_csv(index=False),
