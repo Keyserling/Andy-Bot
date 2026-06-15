@@ -363,11 +363,22 @@ def parse_outreach(
 
 
 def read_contacts(uploaded_file: Any) -> pd.DataFrame:
-    """Read contacts from a CSV upload."""
+    """Read contacts from a CSV or Excel upload."""
     filename = uploaded_file.name.lower()
+    if filename.endswith((".xls", ".xlsx")):
+        return pd.read_excel(uploaded_file)
     if filename.endswith(".csv"):
-        return pd.read_csv(uploaded_file)
-    raise ValueError("Upload a CSV file.")
+        encodings = ("utf-8", "utf-8-sig", "cp1252", "latin1")
+        last_error: Exception | None = None
+        for encoding in encodings:
+            uploaded_file.seek(0)
+            try:
+                return pd.read_csv(uploaded_file, encoding=encoding)
+            except UnicodeDecodeError as exc:
+                last_error = exc
+        if last_error:
+            raise last_error
+    raise ValueError("Upload a .csv, .xls, or .xlsx file.")
 
 
 def empty_output_table() -> pd.DataFrame:
@@ -439,7 +450,9 @@ def main() -> None:
         st.markdown("**Personas**")
         st.write(", ".join(PERSONAS))
 
-    uploaded_file = st.file_uploader("Upload contacts CSV", type=["csv"])
+    uploaded_file = st.file_uploader(
+        "Upload contacts file (.csv, .xls, .xlsx)", type=["csv", "xls", "xlsx"]
+    )
     if (
         uploaded_file is not None
         and uploaded_file.name != st.session_state.uploaded_filename
