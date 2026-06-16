@@ -841,36 +841,79 @@ def build_contact_story(
     use_case: str,
     benefits: tuple[str, ...],
 ) -> str:
-    """Create human-facing story copy without exposing internal routing labels."""
-    persona_text = persona.lower()
-    if story.recommended_offering == "Bioinformatics / Multiomics Software":
+    """Create a concise scientific narrative from the Metabolon knowledge layer."""
+    problem = (story.scientific_problem or "understanding pathway biology").strip()
+    problem_topic = problem
+    problem_action = problem
+    for gerund, infinitive in (
+        ("connecting ", "connect "),
+        ("generating ", "generate "),
+        ("integrating ", "integrate "),
+        ("discovering ", "discover "),
+        ("interpreting ", "interpret "),
+        ("profiling ", "profile "),
+        ("studying ", "study "),
+        ("using ", "use "),
+    ):
+        if problem.lower().startswith(gerund):
+            problem_action = f"how to {infinitive}{problem[len(gerund):]}"
+            if gerund == "generating " and " for " in problem:
+                problem_topic = problem.split(" for ", 1)[1]
+                problem_action = problem_topic
+            break
+    if problem.lower().startswith("understanding "):
+        problem_topic = problem[len("understanding ") :]
+        problem_action = f"how to understand {problem_topic}"
+    capability = (
+        story.primary_capability or "metabolomics adds functional biological context"
+    ).strip()
+    offering = (story.recommended_offering or "Global Discovery Panel").strip()
+    focus = (contact_narrative or "program decisions").strip().rstrip(".").lower()
+
+    if offering == "Biopharma Services":
         return (
-            "Metabolomics can add a functional readout to computational and multi-omics work, "
-            "helping connect predicted pathways with measured biochemical changes in real samples."
+            f"Many clinical and translational teams are working through {problem_action}. "
+            f"That matters because {focus} often depends on explaining why patients respond differently "
+            "despite similar clinical characteristics. "
+            "Metabolomics provides a functional view of biology and can connect treatment response "
+            "with disease mechanisms using samples already collected in studies."
         )
-    if story.recommended_offering == "Lipidomics":
+
+    if offering == "Lipidomics":
         return (
-            "Focused lipid biology can help show whether inflammatory or immune-metabolic signals "
-            "are changing in ways that explain response, subgroup differences, or disease activity."
+            f"The biology around {problem_topic} remains difficult to interpret when "
+            "clinical endpoints do not reveal the "
+            "pathways driving disease activity. "
+            f"For teams focused on {focus}, those signals can shape how response, progression, "
+            "and patient subgroups are interpreted. "
+            "Focused lipid profiling adds value by measuring lipid signaling and immune-metabolic "
+            "pathways linked to treatment biology."
         )
-    if "safety" in persona_text or "quality" in persona_text:
+
+    if offering == "Bioinformatics / Multiomics Software":
         return (
-            "Broad metabolomics can help investigate unexpected findings by showing which pathways "
-            "shift across treatment, control, product, or process-related sample groups."
+            f"Many groups are trying to work through {problem_action} as a coherent "
+            "biological interpretation. "
+            f"This matters for {focus} because transcriptomic, proteomic, and metabolomic signals "
+            "can point in different directions without pathway context. "
+            "Multiomics analysis adds value by connecting molecular observations with pathway "
+            "activity and functional biological outcomes."
         )
-    if "clinical pharmacology" in persona_text:
+
+    if offering == "Global Discovery Panel":
         return (
-            "Metabolite measurements can give pharmacology teams an early biological readout alongside "
-            "dose, exposure, time point, and cohort comparisons."
+            "Many programs generate molecular and clinical data, yet still need clearer "
+            f"evidence about {problem_action}. "
+            f"That matters because {focus} depends on understanding the biology behind observed "
+            "outcomes, not just measuring associations. "
+            "Broad metabolomics adds pathway-level insight into target biology, treatment response, "
+            "and patient heterogeneity from existing samples."
         )
-    if "oncology" in persona_text:
-        return (
-            "Metabolomics can help compare tumor, host, and treatment biology across cohorts, including "
-            "signals linked to response, resistance, or patient subgroups."
-        )
+
     return (
-        f"Metabolomics can help teams {use_case}, while adding quantitative pathway context around "
-        f"{benefits[0]}."
+        f"Many teams are trying to resolve {problem}. "
+        f"That matters because {focus} depends on connecting observed outcomes with underlying biology. "
+        f"{capability} Metabolomics adds value by providing functional pathway evidence from biological samples."
     )
 
 
