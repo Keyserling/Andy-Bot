@@ -879,12 +879,15 @@ def initialize_session_state() -> None:
         "generated_emails": empty_output_table(),
         "outlook_draft_csv": b"",
         "outlook_draft_zip": b"",
+        "manual_linkedin_text": "",
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
 
 
-def generate_outreach_table(contacts: pd.DataFrame) -> pd.DataFrame:
+def generate_outreach_table(
+    contacts: pd.DataFrame, manual_linkedin_text: str = ""
+) -> pd.DataFrame:
     """Generate one persona-based email row for every uploaded contact."""
     name_column = find_name_column(contacts)
     if not name_column:
@@ -913,6 +916,8 @@ def generate_outreach_table(contacts: pd.DataFrame) -> pd.DataFrame:
         linkedin_company = get_cell_value(contact, linkedin_company_column, "")
         linkedin_title = get_cell_value(contact, linkedin_title_column, "")
         linkedin_content = get_cell_value(contact, linkedin_content_column, "")
+        if not linkedin_content and manual_linkedin_text:
+            linkedin_content = manual_linkedin_text
         linkedin_content_available = "Yes" if linkedin_content else "No"
         linkedin_content_preview = linkedin_content[:200]
         integrity = validate_contact_integrity(
@@ -1001,6 +1006,17 @@ def main() -> None:
     uploaded_file = st.file_uploader(
         "Upload contacts file (.csv, .xls, .xlsx)", type=["csv", "xls", "xlsx"]
     )
+    st.session_state.manual_linkedin_text = st.text_area(
+        "Optional LinkedIn profile text",
+        value=st.session_state.manual_linkedin_text,
+        help="Temporary test input captured in LinkedIn output columns only.",
+    ).strip()
+    if st.session_state.manual_linkedin_text:
+        st.warning(
+            "Manual LinkedIn text is for testing only. For batch personalization, "
+            "add a LinkedIn Content column to the input file."
+        )
+
     if (
         uploaded_file is not None
         and uploaded_file.name != st.session_state.uploaded_filename
@@ -1036,7 +1052,9 @@ def main() -> None:
 
     if st.button("Generate emails", type="primary"):
         try:
-            st.session_state.generated_emails = generate_outreach_table(contacts)
+            st.session_state.generated_emails = generate_outreach_table(
+                contacts, st.session_state.manual_linkedin_text
+            )
             st.session_state.outlook_draft_csv = b""
             st.session_state.outlook_draft_zip = b""
         except Exception as exc:
