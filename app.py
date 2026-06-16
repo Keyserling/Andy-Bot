@@ -460,6 +460,24 @@ DOMAIN_TO_COMMON_PHARMA_COMPANY = {
     for domain in domains
 }
 
+COMPANY_BRAND_NAMES = {
+    "abbvie": "AbbVie",
+    "astrazeneca": "AstraZeneca",
+    "bayer": "Bayer",
+    "boehringer ingelheim": "Boehringer Ingelheim",
+    "bristol myers squibb": "Bristol Myers Squibb",
+    "eli lilly": "Eli Lilly",
+    "gilead": "Gilead",
+    "glaxosmithkline": "GSK",
+    "johnson johnson": "Johnson & Johnson",
+    "merck": "Merck",
+    "novartis": "Novartis",
+    "pfizer": "Pfizer",
+    "roche": "Roche",
+    "sanofi": "Sanofi",
+    "takeda": "Takeda",
+}
+
 
 def extract_email_domain(email: str) -> str:
     """Return a normalized domain from an email address, or an empty string."""
@@ -855,11 +873,9 @@ def build_contact_story(
             "Many teams are trying to understand why patients with apparently similar "
             "clinical characteristics respond differently to treatment. Those differences "
             "can be hard to interpret when endpoint, PK, or biomarker data show the outcome "
-            "but not the underlying metabolic changes. Metabolomics provides a functional "
-            "readout of biological activity and can help connect clinical observations with "
-            "mechanisms using samples already collected in studies. These data can clarify "
-            "baseline patient differences, on-treatment effects, and signals associated with "
-            "response or resistance without requiring teams to start from a new study design."
+            "but not the underlying metabolic changes. Metabolomics adds a functional biology "
+            "readout and can help connect clinical observations with pathway activity, mechanism "
+            "understanding, and biomarkers in samples already collected in studies."
         )
 
     if offering == "Lipidomics":
@@ -877,7 +893,7 @@ def build_contact_story(
     if offering == "Bioinformatics / Multiomics Software":
         return (
             "Programs often generate large amounts of molecular and clinical data, yet the "
-            "drivers of observed outcomes remain unclear. Transcriptomic, proteomic, and "
+            "biological drivers of observed outcomes remain unclear. Transcriptomic, proteomic, and "
             "metabolomic results can each be informative, but they are difficult to interpret "
             "when each layer is reviewed separately. Metabolomics provides a functional "
             "measure of biochemical activity, and integrated analysis can connect those "
@@ -904,6 +920,167 @@ def build_contact_story(
         "view of biological activity in available samples, helping connect observed outcomes "
         "with mechanisms that may be worth further study."
     )
+
+
+def display_company_brand(company: str) -> str:
+    """Return a recipient-facing company brand instead of legal-entity wording."""
+    company = company.strip()
+    company_key = company_to_common_pharma_key(company)
+    if company_key in COMPANY_BRAND_NAMES:
+        return COMPANY_BRAND_NAMES[company_key]
+    return company or "your organization"
+
+
+def clean_signal(signal: str) -> str:
+    """Normalize a detected profile signal for use in a human sentence."""
+    signal = signal.strip()
+    signal_display = {
+        "pk/pd": "PK/PD",
+        "multiomics": "multiomics",
+        "multi-omics": "multiomics",
+        "ai": "AI",
+    }.get(signal.lower(), signal.lower())
+    return signal_display
+
+
+def extract_role_change_observation(linkedin_text: str) -> str:
+    """Return a careful role-change observation when the text explicitly supports it."""
+    compact = " ".join(linkedin_text.split())
+    match = re.search(
+        r"(?:joined|moved from|move from|transitioned from)\s+([A-Z][A-Za-z& .-]{1,45}?)\s+(?:to|at)\s+([A-Z][A-Za-z& .-]{1,45})(?:[.;,]|$)",
+        compact,
+        re.I,
+    )
+    if match:
+        previous_company = display_company_brand(match.group(1).strip())
+        current_company = display_company_brand(match.group(2).strip())
+        if previous_company and current_company and previous_company != current_company:
+            return f"Congratulations on your recent move from {previous_company} to {current_company}."
+    match = re.search(
+        r"(?:new role|recently joined|joined)\s+(?:at\s+)?([A-Z][A-Za-z& .-]{1,45})(?:[.;,]|$)",
+        compact,
+        re.I,
+    )
+    if match:
+        current_company = display_company_brand(match.group(1).strip())
+        return f"Congratulations on your recent move to {current_company}."
+    return ""
+
+
+PERSONAL_OBSERVATION_PATTERNS: tuple[tuple[str, tuple[str, ...], str], ...] = (
+    (
+        "Conference participation",
+        ("conference", "congress", "asco", "aacr", "eular", "ash", "esmo"),
+        "Your recent conference participation around {signal} caught my attention.",
+    ),
+    (
+        "Publication",
+        ("publication", "published", "manuscript", "paper", "author", "co-author"),
+        "Your recent publication activity around {signal} caught my attention.",
+    ),
+    (
+        "Therapeutic focus",
+        (
+            "oncology",
+            "cancer",
+            "immunology",
+            "autoimmune",
+            "inflammation",
+            "rare disease",
+            "neurology",
+            "cardiometabolic",
+            "metabolic disease",
+        ),
+        "Interesting to see your work in {signal}.",
+    ),
+    (
+        "Scientific interest",
+        (
+            "pk/pd",
+            "biomarker",
+            "patient stratification",
+            "precision medicine",
+            "target engagement",
+            "drug discovery",
+            "multiomics",
+            "multi-omics",
+            "systems biology",
+            "federated ai",
+        ),
+        "Your recent focus on {signal} caught my attention.",
+    ),
+    (
+        "Responsibility",
+        (
+            "clinical development",
+            "translational",
+            "portfolio",
+            "strategy",
+            "program lead",
+            "team lead",
+            "head of",
+        ),
+        "Your responsibilities around {signal} seem closely connected to how teams interpret patient sample data.",
+    ),
+)
+
+
+def build_personal_observation(
+    linkedin_text: str,
+    contact_narrative: str,
+    persona: str,
+    title: str,
+    company_text: str,
+) -> tuple[str, str, str]:
+    """Build the email's first observation using LinkedIn first, then narrative, then persona."""
+    if linkedin_text.strip():
+        role_change = extract_role_change_observation(linkedin_text)
+        if role_change:
+            return role_change, "Role change", "Yes"
+        normalized_text = linkedin_text.lower()
+        prioritized_patterns = sorted(
+            PERSONAL_OBSERVATION_PATTERNS,
+            key=lambda pattern: 1 if pattern[0] == "Therapeutic focus" else 0,
+        )
+        for hook_type, signals, template in prioritized_patterns:
+            for signal in signals:
+                if pattern_matches(normalized_text, signal):
+                    return (
+                        template.format(signal=clean_signal(signal)),
+                        hook_type,
+                        "Yes",
+                    )
+    if contact_narrative:
+        return (
+            f"Your work appears connected to {contact_narrative[0].lower() + contact_narrative[1:]}",
+            "Contact Narrative",
+            "No",
+        )
+    if title:
+        return (
+            f"Your role at {company_text} appears connected to complex program decisions where patient sample data can be important.",
+            "Persona",
+            "No",
+        )
+    return (
+        f"I’m reaching out because teams at {company_text} often face questions where careful interpretation of patient and study samples can make a real difference.",
+        "Persona",
+        "No",
+    )
+
+
+def build_recipient_relevance(
+    contact_narrative: str, use_case: str, benefits: tuple[str, ...]
+) -> str:
+    """Explain why the scientific problem may matter to this recipient."""
+    benefit = (
+        benefits[0]
+        if benefits
+        else "prioritize follow-up work with stronger biological evidence"
+    )
+    if contact_narrative:
+        return f"For your team, that may be useful when trying to {benefit}."
+    return f"That may be useful when your team needs to {benefit}."
 
 
 LINKEDIN_HOOK_PATTERNS: tuple[tuple[str, tuple[str, ...], str], ...] = (
@@ -966,11 +1143,11 @@ LINKEDIN_HOOK_PATTERNS: tuple[tuple[str, tuple[str, ...], str], ...] = (
 
 def extract_linkedin_hook(linkedin_text: str) -> tuple[str, str, str]:
     """Return a short personalization hook when LinkedIn text has a strong signal."""
-    normalized_text = linkedin_text.lower()
-    for hook_type, signals, template in LINKEDIN_HOOK_PATTERNS:
-        for signal in signals:
-            if pattern_matches(normalized_text, signal):
-                return template.format(signal=signal), hook_type, "Yes"
+    observation, hook_type, hook_used = build_personal_observation(
+        linkedin_text, "", "", "", "your organization"
+    )
+    if hook_used == "Yes":
+        return observation, hook_type, hook_used
     return "", "", "No"
 
 
@@ -997,7 +1174,7 @@ def build_email(
         "YELLOW", "Company cannot be confirmed.", company, ""
     )
     first_name = get_contact_first_name(name, source_first_name)
-    company_text = company or "your organization"
+    company_text = display_company_brand(company)
     if integrity.status == "RED":
         return ContactOutreach(
             name,
@@ -1081,18 +1258,25 @@ def build_email(
             contact_story = build_contact_story(
                 contact_narrative, active_persona, metabolon_story, use_case, benefits
             )
+            observation, hook_type, hook_used = build_personal_observation(
+                linkedin_content_preview,
+                contact_narrative,
+                active_persona,
+                title,
+                company_text,
+            )
+            relevance = build_recipient_relevance(contact_narrative, use_case, benefits)
             email = (
                 f"Dear {first_name},\n\n"
-                f"I’m reaching out because your role at {company_text} appears close to questions "
-                "where careful interpretation of patient and study samples can make a real difference.\n\n"
+                f"{observation}\n\n"
                 "My name is Helmut von Keyserling, and I support "
                 f"{company_text} as Strategic Account Manager at Metabolon.\n\n"
                 f"{contact_story}\n\n"
-                "Would you be open to a short meeting to compare notes on whether this could be "
-                "useful for any current or upcoming programs?\n\n"
+                f"{relevance}\n\n"
+                "Would you be open to a short meeting to compare notes on whether this could be relevant "
+                "to any current or upcoming programs?\n\n"
                 "Best regards,\n\n"
-                "Helmut von Keyserling\n"
-                "Strategic Account Manager"
+                "Helmut"
             )
             if email not in used_emails:
                 used_emails.add(email)
@@ -1120,9 +1304,9 @@ def build_email(
                     metabolon_story.scientific_problem,
                     metabolon_story.email_story,
                     linkedin_content_available,
-                    linkedin_hook,
-                    linkedin_hook_type,
-                    linkedin_hook_used,
+                    observation,
+                    hook_type,
+                    hook_used,
                     linkedin_content_preview,
                 )
 
@@ -1337,9 +1521,11 @@ def build_outlook_graph_draft_table(generated_emails: pd.DataFrame) -> pd.DataFr
             eligible["Integrity Status"].astype(str).str.upper() != "RED"
         ]
     eligible = eligible[
-        ~eligible["Email"].astype(str).str.strip().str.lower().isin(
-            {"review required", "review manually", ""}
-        )
+        ~eligible["Email"]
+        .astype(str)
+        .str.strip()
+        .str.lower()
+        .isin({"review required", "review manually", ""})
     ]
     return build_draft_table(eligible)
 
@@ -1651,7 +1837,10 @@ def main() -> None:
                 f"{st.session_state.outlook_graph_created_count} Outlook drafts created"
             )
 
-        if not st.session_state.outlook_draft_csv or not st.session_state.outlook_draft_zip:
+        if (
+            not st.session_state.outlook_draft_csv
+            or not st.session_state.outlook_draft_zip
+        ):
             (
                 st.session_state.outlook_draft_csv,
                 st.session_state.outlook_draft_zip,
