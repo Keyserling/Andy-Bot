@@ -895,19 +895,34 @@ THERAPEUTIC_SIGNALS = (
     "metabolic disease",
 )
 FUNCTION_SIGNALS = (
-    "clinical pharmacology",
+    "companion diagnostics",
+    "companion diagnostic",
+    "biomarker assay development",
+    "biomarker development",
+    "patient stratification",
+    "translational biomarker technologies",
+    "translational assay technologies",
+    "translational medicine",
     "pk/pd interpretation",
     "pk/pd strategy",
+    "pk/pd biomarker",
     "pk/pd",
+    "molecular diagnostics",
+    "regulatory strategy",
+    "personalized medicine",
+    "precision medicine",
+    "multiomics",
+    "multi-omics",
+    "clinical pharmacology",
     "biomarker strategy",
-    "patient stratification",
-    "biomarker development",
     "bioanalysis",
-    "translational medicine",
     "clinical development",
 )
 SCIENTIFIC_THEME_SIGNALS = (
     "precision medicine",
+    "personalized medicine",
+    "molecular diagnostics",
+    "regulatory strategy",
     "target engagement",
     "drug discovery",
     "multiomics",
@@ -958,6 +973,116 @@ def find_linkedin_signal(normalized_text: str, signals: tuple[str, ...]) -> str:
     return ""
 
 
+LINKEDIN_DISTINCTIVE_SIGNALS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("companion diagnostics", ("companion diagnostics", "companion diagnostic")),
+    (
+        "biomarker assay development",
+        ("biomarker assay development", "biomarker development", "biomarker strategy"),
+    ),
+    ("patient stratification", ("patient stratification",)),
+    (
+        "translational biomarker technologies",
+        (
+            "translational biomarker technologies",
+            "translational assay technologies",
+            "translational medicine",
+            "translational biomarker",
+        ),
+    ),
+    (
+        "PK/PD",
+        ("pk/pd interpretation", "pk/pd strategy", "pk/pd biomarker", "pk/pd"),
+    ),
+    ("molecular diagnostics", ("molecular diagnostics",)),
+    (
+        "oncology diagnostics",
+        ("oncology diagnostics", "oncology", "immuno-oncology", "cancer"),
+    ),
+    ("regulatory strategy", ("regulatory strategy",)),
+    ("multiomics", ("multiomics", "multi-omics")),
+    (
+        "precision medicine",
+        ("personalized medicine", "precision medicine", "target engagement"),
+    ),
+)
+
+
+def find_distinctive_linkedin_signals(normalized_text: str) -> list[str]:
+    """Return distinctive LinkedIn profile signals in configured priority order."""
+    matches: list[str] = []
+    for display_signal, aliases in LINKEDIN_DISTINCTIVE_SIGNALS:
+        if any(pattern_matches(normalized_text, alias) for alias in aliases):
+            matches.append(display_signal)
+    return matches
+
+
+def build_distinctive_linkedin_observation(
+    normalized_text: str,
+) -> tuple[str, str, str, str]:
+    """Build a specific scientific or strategic observation from LinkedIn content."""
+    signals = find_distinctive_linkedin_signals(normalized_text)
+    if not signals:
+        return "", "", "No", "Low"
+
+    signal_set = set(signals)
+    if {"companion diagnostics", "biomarker assay development"} <= signal_set:
+        observation_signals = ["biomarker assay development", "companion diagnostics"]
+        observation = (
+            "I noticed your long-standing focus on biomarker assay development and "
+            "companion diagnostics."
+        )
+    elif {
+        "translational biomarker technologies",
+        "patient stratification",
+    } <= signal_set:
+        observation_signals = [
+            "translational biomarker technologies",
+            "patient stratification",
+        ]
+        observation = (
+            "Interesting to see your work across translational biomarker technologies "
+            "and patient stratification."
+        )
+    elif {"companion diagnostics", "oncology diagnostics"} <= signal_set:
+        observation_signals = ["oncology diagnostics", "companion diagnostics"]
+        observation = (
+            "Your experience spanning oncology diagnostics and companion diagnostic "
+            "strategy caught my attention."
+        )
+    elif {"PK/PD", "oncology diagnostics"} <= signal_set:
+        observation_signals = ["oncology", "PK/PD strategy"]
+        observation = (
+            "Interesting to see your work at the intersection of oncology and "
+            "PK/PD strategy."
+        )
+    elif {"biomarker assay development", "molecular diagnostics"} <= signal_set:
+        observation_signals = [
+            "biomarker development",
+            "molecular diagnostics",
+            "clinical development",
+        ]
+        observation = (
+            "I noticed your work at the intersection of biomarker development, "
+            "molecular diagnostics, and clinical development."
+        )
+    elif len(signals) >= 2:
+        observation_signals = signals[:2]
+        observation = (
+            f"Interesting to see your work across {observation_signals[0]} and "
+            f"{observation_signals[1]}."
+        )
+    else:
+        observation_signals = signals
+        observation = f"Your focus on {signals[0]} caught my attention."
+
+    return (
+        observation,
+        f"distinctive LinkedIn signal: {' / '.join(observation_signals)}",
+        "Yes",
+        "High",
+    )
+
+
 def build_personal_observation(
     linkedin_text: str,
     company_text: str,
@@ -970,6 +1095,9 @@ def build_personal_observation(
         if role_change:
             return role_change, role_source, "Yes", role_confidence
         normalized_text = linkedin_text.lower()
+        distinctive_observation = build_distinctive_linkedin_observation(normalized_text)
+        if distinctive_observation[2] == "Yes":
+            return distinctive_observation
         therapy = find_linkedin_signal(normalized_text, THERAPEUTIC_SIGNALS)
         function = find_linkedin_signal(normalized_text, FUNCTION_SIGNALS)
         if therapy and function:

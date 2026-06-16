@@ -87,6 +87,29 @@ def main() -> None:
     if linkedin_email.linkedin_observation_confidence != "High":
         raise AssertionError("LinkedIn observation confidence should be recorded")
 
+    companion_diagnostics_email = build_email(
+        "Riley Example",
+        "ExampleCo",
+        "Biomarkers / Bioanalysis",
+        linkedin_content_available="Yes",
+        linkedin_content_preview=(
+            "Biomarker assay development, Companion Diagnostics, Personalized "
+            "Medicine, Patient Stratification, Translational Assay Technologies, "
+            "Oncology, Regulatory Strategy, Molecular Diagnostics, Clinical Development"
+        ),
+    )
+    if (
+        "I noticed your long-standing focus on biomarker assay development and companion diagnostics."
+        not in companion_diagnostics_email.email
+    ):
+        raise AssertionError(
+            "LinkedIn extraction must preserve companion diagnostics and biomarker assay signals"
+        )
+    if "Your focus on clinical development caught my attention." in companion_diagnostics_email.email:
+        raise AssertionError(
+            "LinkedIn extraction must not collapse specific diagnostics signals into clinical development"
+        )
+
     formal_email = build_email("Dr. Morgan Smith", "ExampleCo", "Discovery")
     if not formal_email.email.startswith("Dear Dr. Smith,"):
         raise AssertionError("Formal titled contacts must receive a formal greeting")
