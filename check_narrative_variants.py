@@ -25,6 +25,13 @@ FORBIDDEN_EMAIL_TEXT = (
     "could be valuable",
     "align with",
     "[Your Name]",
+    "I noticed your LinkedIn profile",
+    "Many translational teams",
+    "Many discovery teams",
+    "For this contact, the best Metabolon angle is",
+    "Recommended offering",
+    "Persona name",
+    "Metabolon can support",
 )
 
 
@@ -137,7 +144,6 @@ def main() -> None:
     if pharmacology_classification.persona != "Clinical Pharmacology":
         raise AssertionError("Clinical Pharmacology should use its dedicated persona")
 
-
     story_cases = (
         (
             "Frank Oellien",
@@ -188,7 +194,14 @@ def main() -> None:
             "Global Discovery Panel",
         ),
     )
-    for label, persona, title, therapeutic_area, matched_keyword, expected in story_cases:
+    for (
+        label,
+        persona,
+        title,
+        therapeutic_area,
+        matched_keyword,
+        expected,
+    ) in story_cases:
         story = recommend_metabolon_story(
             persona, title, therapeutic_area, matched_keyword
         )
@@ -220,16 +233,40 @@ def main() -> None:
 
     sample_email = build_email("Taylor Example", "ExampleCo", "Discovery").email
     required_lines = (
+        "Given your focus on Understanding functional biology that helps prioritize targets, models, and compounds, I thought this might be relevant.",
         "My name is Helmut von Keyserling, and I support ExampleCo as Strategic Account Manager at Metabolon.",
-        "Many discovery teams are using metabolomics to ",
-        "This type of data can help:",
-        "For this contact, the best Metabolon angle is Global Discovery Panel",
-        "Metabolon can support generating broad biochemical evidence for target biology",
-        "If this is of interest, I would be happy to briefly introduce our approach and learn how your team is thinking about this area.",
+        "Metabolomics can help teams ",
+        "Would you be open to a short meeting to compare notes on where this could fit?",
     )
     for required_line in required_lines:
         if required_line not in sample_email:
             raise AssertionError(f"Missing required email text: {required_line!r}")
+
+    if sample_email != build_email("Taylor Example", "ExampleCo", "Discovery").email:
+        raise AssertionError(
+            "Duplicate contact inputs should produce stable email text when available"
+        )
+
+    word_count = len(sample_email.split())
+    if not 80 <= word_count <= 140:
+        raise AssertionError(f"Email must be 80-140 words, got {word_count}")
+
+    narrative_email = build_email(
+        "Frank Oellien",
+        "ExampleCo",
+        "Computational Biology",
+        title="Computational Drug Discovery",
+        matched_keyword="drug discovery",
+    )
+    if (
+        narrative_email.contact_narrative
+        != "Connecting computational predictions with functional biological evidence."
+    ):
+        raise AssertionError(
+            "Computational contacts should receive the expected contact narrative"
+        )
+    if len(narrative_email.contact_narrative.split()) > 20:
+        raise AssertionError("Contact narrative must not exceed 20 words")
 
     draft_rows = pd.DataFrame(
         [{"To": "recipient@example.com", "Subject": "Subject", "Body": sample_email}]
@@ -239,7 +276,10 @@ def main() -> None:
         unset_message = message_from_bytes(archive.read("contact_001.eml"))
     if unset_message.get("From") is not None:
         raise AssertionError("EML must not set From when sender is not configured")
-    if SENDER_NOT_CONFIGURED_NOTE not in unset_message.get_payload(decode=True).decode():
+    if (
+        SENDER_NOT_CONFIGURED_NOTE
+        not in unset_message.get_payload(decode=True).decode()
+    ):
         raise AssertionError("EML must include sender selection note when unset")
 
     configured_zip = EMLDraftProvider(sender_email="configured").export(draft_rows)
