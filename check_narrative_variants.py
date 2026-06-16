@@ -56,11 +56,17 @@ def main() -> None:
         raise AssertionError(
             "Email should create FOMO without using the goal phrase literally"
         )
-    if "how differently organizations approach" not in sample.email:
-        raise AssertionError("V5 narrative must frame uneven industry adoption")
-    if "what those samples are already trying to say" not in sample.email:
+    if (
+        "What has surprised me is not the growing interest in metabolomics and multiomics"
+        in sample.email
+    ):
+        raise AssertionError("Universal multiomics problem paragraph must be removed")
+    if (
+        "generating molecular data is usually easier than deciding which biological signals should influence a program"
+        not in sample.email
+    ):
         raise AssertionError(
-            "V5 narrative must create constructive FOMO around existing samples"
+            "Default scientific story must use a scientific problem block"
         )
     if "Would it be worth comparing notes?" not in sample.email:
         raise AssertionError("CTA should invite discussion rather than sell services")
@@ -72,6 +78,49 @@ def main() -> None:
         "not all metabolomics platforms are equivalent"
     ) > sample.email.index("Would it be worth comparing notes?"):
         raise AssertionError("Differentiation narrative must appear before the CTA")
+
+    persona_problem_cases = (
+        (
+            "Biomarker Director",
+            "Biomarkers / Bioanalysis",
+            "biomarker programs generate large amounts of molecular data",
+        ),
+        (
+            "PKPD Lead",
+            "Clinical Pharmacology",
+            "exposure-response relationships are often easier to quantify",
+        ),
+        (
+            "Oncology Scientist",
+            "Oncology",
+            "tumor response and resistance are increasingly understood as biological processes",
+        ),
+        (
+            "Immunology Scientist",
+            "Immunology",
+            "patients with similar clinical presentations can exhibit very different underlying biology",
+        ),
+        (
+            "Translational Leader",
+            "Translational / Clinical Development",
+            "promising biological findings do not always translate cleanly",
+        ),
+    )
+    persona_problem_texts = []
+    for name, persona, expected_problem in persona_problem_cases:
+        persona_email = build_email(name, "ExampleCo", persona)
+        if expected_problem not in persona_email.email:
+            raise AssertionError(
+                f"Missing persona-specific problem block for {persona}"
+            )
+        if (
+            "What has surprised me is not the growing interest in metabolomics and multiomics"
+            in persona_email.email
+        ):
+            raise AssertionError(f"Universal multiomics paragraph found for {persona}")
+        persona_problem_texts.append(expected_problem)
+    if len(set(persona_problem_texts)) != len(persona_problem_texts):
+        raise AssertionError("Persona scientific problem blocks must be distinct")
     if "analytical depth, standardization, reproducibility" not in sample.email:
         raise AssertionError(
             "Differentiation narrative must emphasize platform-quality factors"
