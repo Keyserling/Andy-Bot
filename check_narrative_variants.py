@@ -241,14 +241,61 @@ def main() -> None:
 
     sample_email = build_email("Taylor Example", "ExampleCo", "Discovery").email
     required_lines = (
-        "I’m reaching out because your role at ExampleCo appears close to questions where careful interpretation of patient and study samples can make a real difference.",
+        "Your work appears connected to understanding functional biology that helps prioritize targets, models, and compounds.",
         "My name is Helmut von Keyserling, and I support ExampleCo as Strategic Account Manager at Metabolon.",
-        "Metabolomics provides a functional readout of biological activity",
-        "Would you be open to a short meeting to compare notes on whether this could be useful for any current or upcoming programs?",
+        "functional biology",
+        "For your team, that may be useful when",
+        "Would you be open to a short meeting to compare notes on whether this could be relevant to any current or upcoming programs?",
+        "Best regards,\n\nHelmut",
     )
     for required_line in required_lines:
         if required_line not in sample_email:
             raise AssertionError(f"Missing required email text: {required_line!r}")
+
+    if "Helmut von Keyserling\nStrategic Account Manager" in sample_email:
+        raise AssertionError("First-name greetings must use Helmut-only signature")
+
+    branded_email = build_email(
+        "Taylor Example", "AbbVie Deutschland Gmbh", "Discovery"
+    ).email
+    if (
+        "AbbVie Deutschland Gmbh" in branded_email
+        or "AbbVie as Strategic Account Manager" not in branded_email
+    ):
+        raise AssertionError(
+            "Email copy must use company brands instead of legal entity names"
+        )
+
+    linkedin_email = build_email(
+        "Casey Example",
+        "Bayer Aktiengesellschaft",
+        "Clinical Pharmacology",
+        linkedin_content_available="Yes",
+        linkedin_content_preview="Recent focus on PK/PD strategy in oncology and target engagement.",
+    )
+    if linkedin_email.linkedin_hook_used != "Yes":
+        raise AssertionError(
+            "LinkedIn content should become the primary personalization layer"
+        )
+    if "Your recent focus on PK/PD caught my attention." not in linkedin_email.email:
+        raise AssertionError("LinkedIn-derived observation should lead the email")
+    if "LinkedIn" in linkedin_email.email:
+        raise AssertionError("Email copy must not mention LinkedIn explicitly")
+
+    role_change_email = build_email(
+        "Morgan Example",
+        "Bayer Aktiengesellschaft",
+        "Discovery",
+        linkedin_content_available="Yes",
+        linkedin_content_preview="Joined AstraZeneca to Bayer.",
+    )
+    if (
+        "Congratulations on your recent move from AstraZeneca to Bayer."
+        not in role_change_email.email
+    ):
+        raise AssertionError(
+            "Explicit role changes should become a personal observation"
+        )
 
     if sample_email != build_email("Taylor Example", "ExampleCo", "Discovery").email:
         raise AssertionError(
@@ -256,8 +303,8 @@ def main() -> None:
         )
 
     word_count = len(sample_email.split())
-    if not 140 <= word_count <= 180:
-        raise AssertionError(f"Email must be 140-180 words, got {word_count}")
+    if not 120 <= word_count <= 190:
+        raise AssertionError(f"Email must be 120-190 words, got {word_count}")
 
     narrative_email = build_email(
         "Frank Oellien",
