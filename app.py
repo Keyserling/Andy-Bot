@@ -32,6 +32,98 @@ OLD_TO_NEW_PERSONA = {
     "Safety/Risk": "Safety / Quality",
 }
 
+
+PERSONA_SUBJECT_LINES: dict[str, tuple[str, ...]] = {
+    "Biomarkers / Bioanalysis": (
+        "Metabolon | Biomarker stratification and companion diagnostics",
+        "Metabolon | Translational biomarker strategy",
+        "Metabolon | Companion diagnostics and patient stratification",
+    ),
+    "Clinical Pharmacology": (
+        "Metabolon | PK/PD biology and patient response",
+        "Metabolon | Pharmacodynamic biology and treatment response",
+        "Metabolon | Understanding response biology beyond PK/PD",
+    ),
+    "Oncology": (
+        "Metabolon | Oncology response and resistance biology",
+        "Metabolon | Tumor biology and treatment response",
+        "Metabolon | Understanding resistance biology",
+    ),
+    "Translational / Clinical Development": (
+        "Metabolon | Translational biology and development decisions",
+        "Metabolon | Translating biological signals into decisions",
+    ),
+    "Computational Biology": (
+        "Metabolon | Multiomics integration and biological interpretation",
+        "Metabolon | Biological context for AI and multiomics",
+        "Metabolon | Pathway-level insight from multiomics data",
+        "Metabolon | Functional biology beyond genomics",
+        "Metabolon | Interpreting complex multiomics datasets",
+    ),
+}
+
+PERSONA_CTAS: dict[str, str] = {
+    "Biomarkers / Bioanalysis": (
+        "We see these questions come up repeatedly in biomarker and stratification programs. "
+        "If any similar challenges exist within your portfolio, I would be happy to "
+        "compare notes and share what we have learned across other programs."
+    ),
+    "Clinical Pharmacology": (
+        "We see these questions arise frequently in PK/PD and clinical pharmacology settings. "
+        "If similar challenges exist within your programs, I would be happy to compare notes "
+        "and share how other teams have approached them."
+    ),
+    "Oncology": (
+        "We encounter these questions regularly in oncology programs focused on response, "
+        "resistance, and patient selection. If similar topics are relevant within your "
+        "portfolio, I would be happy to compare notes and share perspectives from other programs."
+    ),
+    "Computational Biology": (
+        "We increasingly see teams working through the challenge of translating complex "
+        "multiomics datasets into biologically actionable insights. If similar questions are "
+        "relevant to your work, I would be happy to compare notes and share what we have "
+        "learned across other programs."
+    ),
+    "Translational / Clinical Development": (
+        "We see these questions come up frequently in translational and clinical development "
+        "programs where biological signals need to inform development decisions. If similar "
+        "challenges are relevant within your portfolio, I would be happy to compare notes and "
+        "share what we have learned across other programs."
+    ),
+}
+
+
+def stable_variant_index(*parts: str, variant_count: int) -> int:
+    """Return a deterministic variant index for stable outreach copy selection."""
+    if variant_count <= 1:
+        return 0
+    seed_text = "|".join(part for part in parts if part)
+    return sum(seed_text.encode("utf-8")) % variant_count
+
+
+def select_subject_line(
+    persona: str, name: str, company: str, matched_keyword: str
+) -> str:
+    """Return a deterministic persona-specific subject line."""
+    subjects = PERSONA_SUBJECT_LINES.get(persona)
+    if not subjects:
+        return "Metabolon | Translating biological signals into decisions"
+    return subjects[
+        stable_variant_index(
+            name, company, persona, matched_keyword, variant_count=len(subjects)
+        )
+    ]
+
+
+def select_challenge_oriented_cta(persona: str) -> str:
+    """Return a challenge-oriented CTA matched to the recipient persona."""
+    return PERSONA_CTAS.get(
+        persona,
+        "If similar questions are relevant within your programs, I would be happy to "
+        "compare notes and share what we have learned across other programs.",
+    )
+
+
 PERSONA_PATTERNS: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "Biomarkers / Bioanalysis",
@@ -1495,15 +1587,15 @@ def build_email(
     differentiation_statement = build_metabolon_differentiation(
         metabolon_story, active_persona
     )
-    subject = f"A question on {contact_narrative.rstrip('.').lower()}"
+    subject = select_subject_line(active_persona, name, company_text, matched_keyword)
+    cta = select_challenge_oriented_cta(active_persona)
     email = (
         f"Dear {salutation_name},\n\n"
         f"{observation}\n\n"
         "My name is Helmut von Keyserling, and I work with pharmaceutical R&D organizations at Metabolon.\n\n"
         f"{scientific_story}\n\n"
         f"{differentiation_statement}\n\n"
-        f"I would be interested in how {company_text} currently thinks about this area. "
-        "Would it be worth comparing notes?\n\n"
+        f"{cta}\n\n"
         f"{build_signature(signature_name)}"
     )
     if used_emails is not None:
