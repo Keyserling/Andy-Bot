@@ -99,7 +99,7 @@ def main() -> None:
         ),
     )
     if (
-        "I noticed your long-standing focus on biomarker assay development and companion diagnostics."
+        "Your work across biomarker assay development and companion diagnostics caught my attention."
         not in companion_diagnostics_email.email
     ):
         raise AssertionError(
@@ -108,6 +108,29 @@ def main() -> None:
     if "Your focus on clinical development caught my attention." in companion_diagnostics_email.email:
         raise AssertionError(
             "LinkedIn extraction must not collapse specific diagnostics signals into clinical development"
+        )
+
+    cdx_email = build_email(
+        "Christoph Kneip",
+        "ExampleCo",
+        "Translational / Clinical Development",
+        linkedin_content_available="Yes",
+        linkedin_content_preview=(
+            "Clinical Development leader with experience in CDx, biomarker assay, "
+            "assay validation, diagnostic strategy, and personalized medicine."
+        ),
+    )
+    if (
+        "Your work across biomarker assay development and companion diagnostics "
+        "caught my attention."
+        not in cdx_email.email
+    ):
+        raise AssertionError(
+            "CDx and biomarker-assay signals must receive a distinctive LinkedIn observation"
+        )
+    if "Your focus on clinical development caught my attention." in cdx_email.email:
+        raise AssertionError(
+            "Diagnostic and biomarker signals must outrank generic clinical development"
         )
 
     formal_email = build_email("Dr. Morgan Smith", "ExampleCo", "Discovery")

@@ -913,12 +913,16 @@ THERAPEUTIC_SIGNALS = (
 FUNCTION_SIGNALS = (
     "companion diagnostics",
     "companion diagnostic",
+    "cdx",
+    "biomarker assay",
     "biomarker assay development",
     "biomarker development",
     "patient stratification",
     "translational biomarker technologies",
     "translational assay technologies",
     "translational medicine",
+    "assay validation",
+    "diagnostic strategy",
     "pk/pd interpretation",
     "pk/pd strategy",
     "pk/pd biomarker",
@@ -990,10 +994,19 @@ def find_linkedin_signal(normalized_text: str, signals: tuple[str, ...]) -> str:
 
 
 LINKEDIN_DISTINCTIVE_SIGNALS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("companion diagnostics", ("companion diagnostics", "companion diagnostic")),
+    (
+        "companion diagnostics",
+        ("companion diagnostics", "companion diagnostic", "cdx", "diagnostic strategy"),
+    ),
     (
         "biomarker assay development",
-        ("biomarker assay development", "biomarker development", "biomarker strategy"),
+        (
+            "biomarker assay",
+            "biomarker assay development",
+            "biomarker development",
+            "biomarker strategy",
+            "assay validation",
+        ),
     ),
     ("patient stratification", ("patient stratification",)),
     (
@@ -1129,8 +1142,8 @@ def build_distinctive_linkedin_observation(
     if {"companion diagnostics", "biomarker assay development"} <= signal_set:
         observation_signals = ["biomarker assay development", "companion diagnostics"]
         observation = (
-            "I noticed your long-standing focus on biomarker assay development and "
-            "companion diagnostics."
+            "Your work across biomarker assay development and companion diagnostics "
+            "caught my attention."
         )
     elif {
         "translational biomarker technologies",
