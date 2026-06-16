@@ -219,6 +219,9 @@ class ContactOutreach(NamedTuple):
     linkedin_content_preview: str
     linkedin_content_present: str
     linkedin_summary: str
+    linkedin_observation: str
+    linkedin_observation_source: str
+    linkedin_observation_confidence: str
     personalization_source: str
 
 
@@ -769,7 +772,9 @@ def generate_contact_narrative(
     """Return one deterministic sentence for what this person likely cares about."""
     active_persona = map_persona(persona)
     combined_text = " ".join(
-        part for part in (active_persona, title, therapeutic_area, matched_keyword) if part
+        part
+        for part in (active_persona, title, therapeutic_area, matched_keyword)
+        if part
     ).lower()
     if "pk/pd" in combined_text or "pharmacology" in combined_text:
         narrative = "PK/PD interpretation in clinical samples."
@@ -782,24 +787,35 @@ def generate_contact_narrative(
     elif "translational" in combined_text or "clinical development" in combined_text:
         narrative = "Translational decision making."
     else:
-        narrative = CARE_STATEMENTS.get(active_persona, "Translational decision making.")
-    confidence = round(min(persona_confidence_score + (0.04 if matched_keyword else 0), 0.98), 2)
+        narrative = CARE_STATEMENTS.get(
+            active_persona, "Translational decision making."
+        )
+    confidence = round(
+        min(persona_confidence_score + (0.04 if matched_keyword else 0), 0.98), 2
+    )
     return narrative, confidence
 
 
 def build_scientific_story(story: MetabolonStory) -> str:
     """Build a V5 industry-shift paragraph around uneven adoption and insight gaps."""
     offering = (story.recommended_offering or "Global Discovery Panel").strip()
-    problem = story.scientific_problem or "extracting biological insight from available samples"
+    problem = (
+        story.scientific_problem
+        or "extracting biological insight from available samples"
+    )
 
     if offering == "Biopharma Services":
         workflow_context = "biomarker, translational, and PK/PD workflows"
     elif offering == "Lipidomics":
-        workflow_context = "biomarker, translational, and patient-stratification workflows"
+        workflow_context = (
+            "biomarker, translational, and patient-stratification workflows"
+        )
     elif offering == "Multiomics":
         workflow_context = "mechanism, biomarker, and translational workflows"
     else:
-        workflow_context = "biomarker, mechanism, translational, and patient-stratification workflows"
+        workflow_context = (
+            "biomarker, mechanism, translational, and patient-stratification workflows"
+        )
 
     return (
         "What has surprised me is not the growing interest in metabolomics and multiomics, "
@@ -824,6 +840,8 @@ def clean_signal(signal: str) -> str:
     signal = signal.strip()
     signal_display = {
         "pk/pd": "PK/PD",
+        "pk/pd strategy": "PK/PD strategy",
+        "pk/pd interpretation": "PK/PD interpretation",
         "multiomics": "multiomics",
         "multi-omics": "multiomics",
         "ai": "AI",
@@ -831,7 +849,7 @@ def clean_signal(signal: str) -> str:
     return signal_display
 
 
-def extract_role_change_observation(linkedin_text: str) -> str:
+def extract_role_change_observation(linkedin_text: str) -> tuple[str, str, str]:
     """Return a careful role-change observation when the text explicitly supports it."""
     compact = " ".join(linkedin_text.split())
     match = re.search(
@@ -843,7 +861,11 @@ def extract_role_change_observation(linkedin_text: str) -> str:
         previous_company = display_company_brand(match.group(1).strip())
         current_company = display_company_brand(match.group(2).strip())
         if previous_company and current_company and previous_company != current_company:
-            return f"Congratulations on your recent move from {previous_company} to {current_company}."
+            return (
+                f"Congratulations on your recent move from {previous_company} to {current_company}.",
+                f"recent job change: {previous_company} to {current_company}",
+                "High",
+            )
     match = re.search(
         r"(?:new role|recently joined|joined)\s+(?:at\s+)?([A-Z][A-Za-z& .-]{1,45})(?:[.;,]|$)",
         compact,
@@ -851,81 +873,154 @@ def extract_role_change_observation(linkedin_text: str) -> str:
     )
     if match:
         current_company = display_company_brand(match.group(1).strip())
-        return f"Congratulations on your recent move to {current_company}."
-    return ""
+        return (
+            f"Congratulations on your recent move to {current_company}.",
+            f"recent job change: {current_company}",
+            "Medium",
+        )
+    return "", "", ""
 
 
+THERAPEUTIC_SIGNALS = (
+    "immuno-oncology",
+    "hematology-oncology",
+    "oncology",
+    "cancer",
+    "immunology",
+    "autoimmune",
+    "inflammation",
+    "rare disease",
+    "neurology",
+    "cardiometabolic",
+    "metabolic disease",
+)
+FUNCTION_SIGNALS = (
+    "clinical pharmacology",
+    "pk/pd interpretation",
+    "pk/pd strategy",
+    "pk/pd",
+    "biomarker strategy",
+    "patient stratification",
+    "biomarker development",
+    "bioanalysis",
+    "translational medicine",
+    "clinical development",
+)
+SCIENTIFIC_THEME_SIGNALS = (
+    "precision medicine",
+    "target engagement",
+    "drug discovery",
+    "multiomics",
+    "multi-omics",
+    "systems biology",
+    "federated ai",
+)
+TOPIC_CONTEXT_SIGNALS = (
+    "publication",
+    "published",
+    "manuscript",
+    "paper",
+    "author",
+    "co-author",
+    "project",
+    "conference",
+    "congress",
+    "asco",
+    "aacr",
+    "eular",
+    "ash",
+    "esmo",
+)
 PERSONAL_OBSERVATION_PATTERNS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     (
         "Therapeutic focus",
-        (
-            "oncology",
-            "cancer",
-            "immunology",
-            "autoimmune",
-            "inflammation",
-            "rare disease",
-            "neurology",
-            "cardiometabolic",
-            "metabolic disease",
-        ),
+        THERAPEUTIC_SIGNALS,
         "Interesting to see your focus in {signal}.",
     ),
     (
         "Scientific focus",
-        (
-            "pk/pd",
-            "biomarker",
-            "patient stratification",
-            "precision medicine",
-            "target engagement",
-            "drug discovery",
-            "multiomics",
-            "multi-omics",
-            "systems biology",
-            "federated ai",
-        ),
+        FUNCTION_SIGNALS + SCIENTIFIC_THEME_SIGNALS,
         "Interesting to see your focus on {signal}.",
     ),
     (
-        "Publication topic",
-        ("publication", "published", "manuscript", "paper", "author", "co-author"),
-        "I noticed your recent publication activity around {signal}.",
-    ),
-    (
-        "Conference activity",
-        ("conference", "congress", "asco", "aacr", "eular", "ash", "esmo"),
-        "I noticed your recent conference activity around {signal}.",
-    ),
-    (
-        "Stated responsibility",
-        (
-            "translational medicine",
-            "clinical development",
-            "biomarker development",
-            "bioanalysis",
-            "clinical pharmacology",
-        ),
-        "I noticed your focus across {signal}.",
+        "Publication or event topic",
+        TOPIC_CONTEXT_SIGNALS,
+        "I noticed your recent activity around {signal}.",
     ),
 )
+
+
+def find_linkedin_signal(normalized_text: str, signals: tuple[str, ...]) -> str:
+    """Return the first configured signal present in pasted LinkedIn text."""
+    for signal in signals:
+        if pattern_matches(normalized_text, signal):
+            return signal
+    return ""
 
 
 def build_personal_observation(
     linkedin_text: str,
     company_text: str,
-) -> tuple[str, str, str]:
+) -> tuple[str, str, str, str]:
     """Return one observation from LinkedIn, or the required company-role fallback."""
     if linkedin_text.strip():
-        role_change = extract_role_change_observation(linkedin_text)
+        role_change, role_source, role_confidence = extract_role_change_observation(
+            linkedin_text
+        )
         if role_change:
-            return role_change, "Role change", "Yes"
+            return role_change, role_source, "Yes", role_confidence
         normalized_text = linkedin_text.lower()
-        for hook_type, signals, template in PERSONAL_OBSERVATION_PATTERNS:
-            for signal in signals:
-                if pattern_matches(normalized_text, signal):
-                    return template.format(signal=clean_signal(signal)), hook_type, "Yes"
-    return f"Given your role at {company_text}, I thought this might be relevant.", "LinkedIn fallback", "No"
+        therapy = find_linkedin_signal(normalized_text, THERAPEUTIC_SIGNALS)
+        function = find_linkedin_signal(normalized_text, FUNCTION_SIGNALS)
+        if therapy and function:
+            return (
+                f"Interesting to see your work at the intersection of {clean_signal(therapy)} and {clean_signal(function)}.",
+                f"therapeutic area + function: {clean_signal(therapy)} / {clean_signal(function)}",
+                "Yes",
+                "High",
+            )
+        if function:
+            if function in ("pk/pd", "pk/pd strategy", "pk/pd interpretation"):
+                observation = "Your focus on PK/PD interpretation in clinical development caught my attention."
+            elif function in ("biomarker strategy", "patient stratification"):
+                observation = "I noticed your work around biomarker strategy and patient stratification."
+            else:
+                observation = (
+                    f"Your focus on {clean_signal(function)} caught my attention."
+                )
+            return (
+                observation,
+                f"functional specialty: {clean_signal(function)}",
+                "Yes",
+                "High",
+            )
+        theme = find_linkedin_signal(normalized_text, SCIENTIFIC_THEME_SIGNALS)
+        if theme:
+            return (
+                f"Interesting to see your work around {clean_signal(theme)}.",
+                f"scientific theme: {clean_signal(theme)}",
+                "Yes",
+                "Medium",
+            )
+        topic = find_linkedin_signal(
+            normalized_text,
+            FUNCTION_SIGNALS + SCIENTIFIC_THEME_SIGNALS + THERAPEUTIC_SIGNALS,
+        )
+        context = find_linkedin_signal(normalized_text, TOPIC_CONTEXT_SIGNALS)
+        if topic and context:
+            return (
+                f"I noticed your recent {clean_signal(context)} activity around {clean_signal(topic)}.",
+                f"publication/project/conference topic: {clean_signal(context)} + {clean_signal(topic)}",
+                "Yes",
+                "Medium",
+            )
+    return (
+        f"Given your role at {company_text}, I thought this might be relevant.",
+        "LinkedIn fallback",
+        "No",
+        "Low",
+    )
+
 
 def summarize_linkedin_content(linkedin_text: str) -> str:
     """Return a compact debug-only summary of LinkedIn content signals."""
@@ -948,7 +1043,7 @@ def linkedin_content_present_flag(linkedin_text: str) -> str:
 
 def extract_linkedin_hook(linkedin_text: str) -> tuple[str, str, str]:
     """Return a short observation when LinkedIn text contains an eligible signal."""
-    observation, hook_type, hook_used = build_personal_observation(
+    observation, hook_type, hook_used, _ = build_personal_observation(
         linkedin_text, "your organization"
     )
     if hook_used == "Yes":
@@ -1015,6 +1110,9 @@ def build_email(
             linkedin_content_preview,
             linkedin_content_present,
             linkedin_summary,
+            linkedin_hook,
+            linkedin_hook_type,
+            "High" if linkedin_hook_used == "Yes" else "Low",
             initial_personalization_source,
         )
     active_persona = map_persona(persona)
@@ -1046,6 +1144,9 @@ def build_email(
             linkedin_content_preview,
             linkedin_content_present,
             linkedin_summary,
+            linkedin_hook,
+            linkedin_hook_type,
+            "High" if linkedin_hook_used == "Yes" else "Low",
             initial_personalization_source,
         )
 
@@ -1059,7 +1160,7 @@ def build_email(
         matched_keyword,
         persona_confidence_score,
     )
-    observation, hook_type, hook_used = build_personal_observation(
+    observation, hook_type, hook_used, linkedin_confidence = build_personal_observation(
         linkedin_content_preview, company_text
     )
     scientific_story = build_scientific_story(metabolon_story)
@@ -1107,6 +1208,9 @@ def build_email(
         linkedin_content_preview,
         linkedin_content_present,
         linkedin_summary,
+        observation,
+        hook_type,
+        linkedin_confidence,
         "LinkedIn" if hook_used == "Yes" else "LinkedIn fallback",
     )
 
@@ -1160,6 +1264,9 @@ def empty_output_table() -> pd.DataFrame:
             "LinkedIn Content Preview",
             "LinkedIn Content Present",
             "LinkedIn Summary",
+            "LinkedIn Observation",
+            "LinkedIn Observation Source",
+            "LinkedIn Observation Confidence",
             "Personalization Source",
         ]
     )
@@ -1303,6 +1410,9 @@ def generate_outreach_table(
             "LinkedIn Content Preview",
             "LinkedIn Content Present",
             "LinkedIn Summary",
+            "LinkedIn Observation",
+            "LinkedIn Observation Source",
+            "LinkedIn Observation Confidence",
             "Personalization Source",
         ],
     )
