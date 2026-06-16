@@ -1422,9 +1422,15 @@ def build_email(
         matched_keyword,
         persona_confidence_score,
     )
-    observation, hook_type, hook_used, linkedin_confidence = build_personal_observation(
-        linkedin_content_preview, company_text
-    )
+    if linkedin_hook_used == "Yes" and linkedin_hook:
+        observation = linkedin_hook
+        hook_type = linkedin_hook_type
+        hook_used = linkedin_hook_used
+        linkedin_confidence = "High"
+    else:
+        observation, hook_type, hook_used, linkedin_confidence = build_personal_observation(
+            linkedin_content_preview, company_text
+        )
     personalization_source = "LinkedIn" if hook_used == "Yes" else "LinkedIn fallback"
     selected_linkedin_signal = extract_selected_linkedin_signal(hook_type)
     signal_audit = linkedin_signal_audit_columns(
