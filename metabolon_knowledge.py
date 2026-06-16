@@ -92,7 +92,7 @@ OFFERING_FAMILIES = {
             "Medical Affairs",
         ),
     },
-    "Bioinformatics / Multiomics Software": {
+    "Multiomics": {
         "positioning": (
             "Software and analysis workflows that help integrate metabolomics with "
             "transcriptomics, proteomics, genomics, and other omics data to interpret "
@@ -177,7 +177,7 @@ def recommend_metabolon_story(
 
     if "computational" in combined_text or "bioinformatics" in combined_text:
         return _story_for(
-            "Bioinformatics / Multiomics Software",
+            "Multiomics",
             "integrating metabolomics with other omics data for pathway and mechanism interpretation",
             0.92,
         )
