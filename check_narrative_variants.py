@@ -139,6 +139,10 @@ def main() -> None:
         "LinkedIn Observation",
         "LinkedIn Observation Source",
         "LinkedIn Observation Confidence",
+        "LinkedIn Signal #1",
+        "LinkedIn Signal Score #1",
+        "Selected Signal",
+        "Selection Reason",
     ):
         if column not in rows.columns:
             raise AssertionError(f"Missing LinkedIn debug column: {column}")
