@@ -207,6 +207,9 @@ class ContactOutreach(NamedTuple):
     scientific_problem: str
     email_story: str
     linkedin_content_available: str
+    linkedin_hook: str
+    linkedin_hook_type: str
+    linkedin_hook_used: str
     linkedin_content_preview: str
 
 
@@ -318,6 +321,21 @@ def find_linkedin_content_column(dataframe: pd.DataFrame) -> str | None:
             "linkedin text",
             "linkedin content",
             "linkedin profile text",
+        ),
+    )
+
+
+def find_linkedin_url_column(dataframe: pd.DataFrame) -> str | None:
+    """Find the most likely personal LinkedIn profile URL column."""
+    return find_column(
+        dataframe,
+        (
+            "person linkedin url",
+            "person_linkedin_url",
+            "linkedin url",
+            "linkedin_url",
+            "linkedin",
+            "profile linkedin url",
         ),
     )
 
@@ -693,6 +711,74 @@ def get_narrative_personas() -> tuple[str, ...]:
     return PERSONAS
 
 
+LINKEDIN_HOOK_PATTERNS: tuple[tuple[str, tuple[str, ...], str], ...] = (
+    (
+        "Therapeutic area",
+        (
+            "oncology",
+            "cancer",
+            "immunology",
+            "autoimmune",
+            "inflammation",
+            "rare disease",
+            "neurology",
+            "cardiometabolic",
+            "metabolic disease",
+        ),
+        "I noticed your LinkedIn profile highlights work in {signal}; that focus is closely aligned with where metabolomics can add biologically grounded context.",
+    ),
+    (
+        "Biomarker signal",
+        (
+            "biomarker",
+            "translational",
+            "clinical development",
+            "precision medicine",
+            "patient stratification",
+            "pharmacodynamic",
+            "pk/pd",
+        ),
+        "I noticed your LinkedIn profile emphasizes {signal}, so I wanted to tailor this note around metabolomics as a practical way to strengthen translational evidence.",
+    ),
+    (
+        "Discovery signal",
+        (
+            "drug discovery",
+            "target discovery",
+            "multiomics",
+            "multi-omics",
+            "systems biology",
+            "computational biology",
+            "bioinformatics",
+        ),
+        "I noticed your LinkedIn profile points to {signal}; that stood out because metabolomics can add a functional readout to discovery and multi-omics programs.",
+    ),
+    (
+        "Leadership signal",
+        (
+            "strategy",
+            "portfolio",
+            "program lead",
+            "team lead",
+            "head of",
+            "executive director",
+            "vice president",
+        ),
+        "I noticed your LinkedIn profile highlights {signal}, so I thought a concise, outcome-focused note on where Metabolon can support teams would be most useful.",
+    ),
+)
+
+
+def extract_linkedin_hook(linkedin_text: str) -> tuple[str, str, str]:
+    """Return a short personalization hook when LinkedIn text has a strong signal."""
+    normalized_text = linkedin_text.lower()
+    for hook_type, signals, template in LINKEDIN_HOOK_PATTERNS:
+        for signal in signals:
+            if pattern_matches(normalized_text, signal):
+                return template.format(signal=signal), hook_type, "Yes"
+    return "", "", "No"
+
+
 def build_email(
     name: str,
     company: str,
@@ -707,6 +793,9 @@ def build_email(
     therapeutic_area: str = "",
     linkedin_content_available: str = "No",
     linkedin_content_preview: str = "",
+    linkedin_hook: str = "",
+    linkedin_hook_type: str = "",
+    linkedin_hook_used: str = "No",
 ) -> ContactOutreach:
     """Build outreach from one random subject and one persona-specific use case."""
     integrity = integrity or ContactIntegrity(
@@ -734,6 +823,9 @@ def build_email(
             "",
             "",
             linkedin_content_available,
+            linkedin_hook,
+            linkedin_hook_type,
+            linkedin_hook_used,
             linkedin_content_preview,
         )
     active_persona = map_persona(persona)
@@ -757,6 +849,9 @@ def build_email(
             "",
             "",
             linkedin_content_available,
+            linkedin_hook,
+            linkedin_hook_type,
+            linkedin_hook_used,
             linkedin_content_preview,
         )
 
@@ -793,6 +888,10 @@ def build_email(
                 "Helmut von Keyserling\n"
                 "Strategic Account Manager"
             )
+            if linkedin_hook_used == "Yes" and linkedin_hook:
+                email = email.replace(
+                    "\n\nMy name is", f"\n\n{linkedin_hook}\n\nMy name is", 1
+                )
             if email not in used_emails:
                 used_emails.add(email)
                 variant_id = (
@@ -817,6 +916,9 @@ def build_email(
                     metabolon_story.scientific_problem,
                     metabolon_story.email_story,
                     linkedin_content_available,
+                    linkedin_hook,
+                    linkedin_hook_type,
+                    linkedin_hook_used,
                     linkedin_content_preview,
                 )
 
@@ -866,6 +968,9 @@ def empty_output_table() -> pd.DataFrame:
             "Scientific Problem",
             "Email Story",
             "LinkedIn Content Available",
+            "LinkedIn Hook",
+            "LinkedIn Hook Type",
+            "LinkedIn Hook Used",
             "LinkedIn Content Preview",
         ]
     )
@@ -879,20 +984,29 @@ def initialize_session_state() -> None:
         "generated_emails": empty_output_table(),
         "outlook_draft_csv": b"",
         "outlook_draft_zip": b"",
-        "manual_linkedin_text": "",
+        "linkedin_text_by_contact": {},
+        "selected_linkedin_contact": "",
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
 
 
-def generate_outreach_table(
-    contacts: pd.DataFrame, manual_linkedin_text: str = ""
-) -> pd.DataFrame:
-    """Generate one persona-based email row for every uploaded contact."""
+def get_contact_key(index: int, email: str) -> str:
+    """Return a stable session-state key for a contact."""
+    return email.lower().strip() if email else f"row-{index}"
+
+
+def generate_contact_outreach(
+    contact: pd.Series,
+    index: int,
+    contacts: pd.DataFrame,
+    linkedin_text_by_contact: dict[str, str] | None = None,
+    used_emails: set[str] | None = None,
+) -> ContactOutreach:
+    """Generate outreach for a single contact without changing other rows."""
     name_column = find_name_column(contacts)
     if not name_column:
         raise ValueError("Could not find any columns in the uploaded file.")
-
     company_column = find_company_column(contacts)
     email_column = find_email_column(contacts)
     linkedin_company_column = find_linkedin_company_column(contacts)
@@ -900,6 +1014,54 @@ def generate_outreach_table(
     linkedin_content_column = find_linkedin_content_column(contacts)
     first_name_column = find_first_name_column(contacts)
     role_columns = find_role_columns(contacts)
+
+    name = get_cell_value(contact, name_column, "Unnamed Contact")
+    company = get_cell_value(contact, company_column, "")
+    to = get_cell_value(contact, email_column, "")
+    source_first_name = get_cell_value(contact, first_name_column, "")
+    linkedin_company = get_cell_value(contact, linkedin_company_column, "")
+    linkedin_title = get_cell_value(contact, linkedin_title_column, "")
+    linkedin_content = get_cell_value(contact, linkedin_content_column, "")
+    contact_key = get_contact_key(index, to)
+    linkedin_text_by_contact = linkedin_text_by_contact or {}
+    if linkedin_text_by_contact.get(contact_key, "").strip():
+        linkedin_content = linkedin_text_by_contact[contact_key].strip()
+    linkedin_content_available = "Yes" if linkedin_content else "No"
+    linkedin_hook, linkedin_hook_type, linkedin_hook_used = extract_linkedin_hook(
+        linkedin_content
+    )
+    integrity = validate_contact_integrity(
+        company, to, linkedin_company, linkedin_title
+    )
+    classification = classify_persona(contact, role_columns)
+    return build_email(
+        name,
+        company,
+        classification.persona,
+        to,
+        classification.confidence_score,
+        classification.matched_keyword,
+        source_first_name,
+        used_emails,
+        integrity,
+        linkedin_title or row_to_text(contact, role_columns),
+        row_to_text(contact),
+        linkedin_content_available,
+        linkedin_content[:200],
+        linkedin_hook,
+        linkedin_hook_type,
+        linkedin_hook_used,
+    )
+
+
+def generate_outreach_table(
+    contacts: pd.DataFrame, linkedin_text_by_contact: dict[str, str] | None = None
+) -> pd.DataFrame:
+    """Generate one persona-based email row for every uploaded contact."""
+    if not find_name_column(contacts):
+        raise ValueError("Could not find any columns in the uploaded file.")
+
+    linkedin_text_by_contact = linkedin_text_by_contact or {}
     rows: list[ContactOutreach] = []
     used_emails: set[str] = set()
     progress = st.progress(
@@ -909,36 +1071,9 @@ def generate_outreach_table(
 
     total_contacts = len(contacts)
     for position, (_, contact) in enumerate(contacts.iterrows(), start=1):
-        name = get_cell_value(contact, name_column, "Unnamed Contact")
-        company = get_cell_value(contact, company_column, "")
-        to = get_cell_value(contact, email_column, "")
-        source_first_name = get_cell_value(contact, first_name_column, "")
-        linkedin_company = get_cell_value(contact, linkedin_company_column, "")
-        linkedin_title = get_cell_value(contact, linkedin_title_column, "")
-        linkedin_content = get_cell_value(contact, linkedin_content_column, "")
-        if not linkedin_content and manual_linkedin_text:
-            linkedin_content = manual_linkedin_text
-        linkedin_content_available = "Yes" if linkedin_content else "No"
-        linkedin_content_preview = linkedin_content[:200]
-        integrity = validate_contact_integrity(
-            company, to, linkedin_company, linkedin_title
-        )
-        classification = classify_persona(contact, role_columns)
         rows.append(
-            build_email(
-                name,
-                company,
-                classification.persona,
-                to,
-                classification.confidence_score,
-                classification.matched_keyword,
-                source_first_name,
-                used_emails,
-                integrity,
-                linkedin_title or row_to_text(contact, role_columns),
-                row_to_text(contact),
-                linkedin_content_available,
-                linkedin_content_preview,
+            generate_contact_outreach(
+                contact, position - 1, contacts, linkedin_text_by_contact, used_emails
             )
         )
         progress.progress(
@@ -968,6 +1103,9 @@ def generate_outreach_table(
             "Scientific Problem",
             "Email Story",
             "LinkedIn Content Available",
+            "LinkedIn Hook",
+            "LinkedIn Hook Type",
+            "LinkedIn Hook Used",
             "LinkedIn Content Preview",
         ],
     )
@@ -989,6 +1127,86 @@ def build_outlook_draft_exports(generated_emails: pd.DataFrame) -> tuple[bytes, 
     )
 
 
+def render_linkedin_personalization(contacts: pd.DataFrame) -> None:
+    """Render per-contact LinkedIn personalization controls."""
+    if st.session_state.generated_emails.empty:
+        return
+
+    name_column = find_name_column(contacts)
+    company_column = find_company_column(contacts)
+    email_column = find_email_column(contacts)
+    title_column = find_linkedin_title_column(contacts)
+    linkedin_url_column = find_linkedin_url_column(contacts)
+
+    contact_options: list[tuple[str, int, str]] = []
+    for index, contact in contacts.reset_index(drop=True).iterrows():
+        name = get_cell_value(contact, name_column, "Unnamed Contact")
+        email = get_cell_value(contact, email_column, "")
+        company = get_cell_value(contact, company_column, "")
+        key = get_contact_key(index, email)
+        contact_options.append(
+            (f"{index + 1}. {name} — {company} — {email or key}", index, key)
+        )
+
+    st.subheader("Select contact for LinkedIn personalization")
+    labels = [option[0] for option in contact_options]
+    selected_label = st.selectbox(
+        "Select contact for LinkedIn personalization",
+        labels,
+        label_visibility="collapsed",
+    )
+    selected_index, selected_key = next(
+        (index, key) for label, index, key in contact_options if label == selected_label
+    )
+    contact = contacts.reset_index(drop=True).iloc[selected_index]
+    generated = st.session_state.generated_emails.iloc[selected_index]
+
+    st.write(
+        f"**Full Name:** {get_cell_value(contact, name_column, 'Unnamed Contact')}"
+    )
+    st.write(f"**Title:** {get_cell_value(contact, title_column, '')}")
+    st.write(f"**Company:** {get_cell_value(contact, company_column, '')}")
+    st.write(f"**Email:** {get_cell_value(contact, email_column, '')}")
+    linkedin_url = get_cell_value(contact, linkedin_url_column, "")
+    if linkedin_url:
+        st.markdown(f"**Person Linkedin Url:** [Open LinkedIn profile]({linkedin_url})")
+    else:
+        st.write("**Person Linkedin Url:** Not provided")
+    st.write(f"**Current generated Subject:** {generated['Subject']}")
+    st.text_area(
+        "Current generated Email",
+        value=str(generated["Email"]),
+        height=260,
+        disabled=True,
+    )
+
+    text_value = st.text_area(
+        "Paste LinkedIn profile text for this contact",
+        value=st.session_state.linkedin_text_by_contact.get(selected_key, ""),
+        key=f"linkedin_text_input_{selected_key}",
+        height=180,
+    )
+    if st.button("Save LinkedIn text and regenerate this email"):
+        st.session_state.linkedin_text_by_contact[selected_key] = text_value.strip()
+        used_emails = set(
+            st.session_state.generated_emails["Email"].dropna().astype(str)
+        )
+        used_emails.discard(str(generated["Email"]))
+        updated = generate_contact_outreach(
+            contact,
+            selected_index,
+            contacts,
+            st.session_state.linkedin_text_by_contact,
+            used_emails,
+        )
+        st.session_state.generated_emails.iloc[selected_index] = list(updated)
+        st.session_state.outlook_draft_csv = b""
+        st.session_state.outlook_draft_zip = b""
+        st.success(
+            "Saved LinkedIn text and regenerated only the selected contact's email."
+        )
+
+
 def main() -> None:
     st.set_page_config(page_title="Andy Bot", page_icon="🤖", layout="wide")
     initialize_session_state()
@@ -1006,17 +1224,6 @@ def main() -> None:
     uploaded_file = st.file_uploader(
         "Upload contacts file (.csv, .xls, .xlsx)", type=["csv", "xls", "xlsx"]
     )
-    st.session_state.manual_linkedin_text = st.text_area(
-        "Optional LinkedIn profile text",
-        value=st.session_state.manual_linkedin_text,
-        help="Temporary test input captured in LinkedIn output columns only.",
-    ).strip()
-    if st.session_state.manual_linkedin_text:
-        st.warning(
-            "Manual LinkedIn text is for testing only. For batch personalization, "
-            "add a LinkedIn Content column to the input file."
-        )
-
     if (
         uploaded_file is not None
         and uploaded_file.name != st.session_state.uploaded_filename
@@ -1038,6 +1245,8 @@ def main() -> None:
         st.session_state.generated_emails = empty_output_table()
         st.session_state.outlook_draft_csv = b""
         st.session_state.outlook_draft_zip = b""
+        st.session_state.linkedin_text_by_contact = {}
+        st.session_state.selected_linkedin_contact = ""
         st.success(
             f"Imported {len(contacts)} contacts. Andy Bot will export one email per contact."
         )
@@ -1053,7 +1262,7 @@ def main() -> None:
     if st.button("Generate emails", type="primary"):
         try:
             st.session_state.generated_emails = generate_outreach_table(
-                contacts, st.session_state.manual_linkedin_text
+                contacts, st.session_state.linkedin_text_by_contact
             )
             st.session_state.outlook_draft_csv = b""
             st.session_state.outlook_draft_zip = b""
@@ -1062,6 +1271,8 @@ def main() -> None:
             return
 
     if not st.session_state.generated_emails.empty:
+        render_linkedin_personalization(contacts)
+
         st.subheader("Generated Emails")
         st.dataframe(
             st.session_state.generated_emails, use_container_width=True, hide_index=True
