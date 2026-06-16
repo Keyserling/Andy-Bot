@@ -47,14 +47,21 @@ def main() -> None:
         raise AssertionError("Signature must include Helmut's email address")
     if "\nHelmut\n\nStrategic Account Manager" not in sample.email:
         raise AssertionError("First-name greetings must sign with Helmut")
-    if "Given your role at ExampleCo, I thought this might be relevant." not in sample.email:
+    if (
+        "Given your role at ExampleCo, I thought this might be relevant."
+        not in sample.email
+    ):
         raise AssertionError("Missing required no-LinkedIn fallback observation")
     if "Are we doing enough" in sample.email:
-        raise AssertionError("Email should create FOMO without using the goal phrase literally")
+        raise AssertionError(
+            "Email should create FOMO without using the goal phrase literally"
+        )
     if "how differently organizations approach" not in sample.email:
         raise AssertionError("V5 narrative must frame uneven industry adoption")
     if "what those samples are already trying to say" not in sample.email:
-        raise AssertionError("V5 narrative must create constructive FOMO around existing samples")
+        raise AssertionError(
+            "V5 narrative must create constructive FOMO around existing samples"
+        )
     if "Would it be worth comparing notes?" not in sample.email:
         raise AssertionError("CTA should invite discussion rather than sell services")
     for phrase in FORBIDDEN_EMAIL_TEXT:
@@ -68,16 +75,25 @@ def main() -> None:
         linkedin_content_available="Yes",
         linkedin_content_preview="Recent focus on PK/PD strategy in oncology and target engagement.",
     )
-    if "Interesting to see your focus in oncology." not in linkedin_email.email:
-        raise AssertionError("LinkedIn-derived observation should use the highest-priority true signal")
+    if (
+        "Interesting to see your work at the intersection of oncology and PK/PD strategy."
+        not in linkedin_email.email
+    ):
+        raise AssertionError(
+            "LinkedIn-derived observation should use the highest-priority true signal"
+        )
     if linkedin_email.personalization_source != "LinkedIn":
         raise AssertionError("LinkedIn source should be recorded when a signal is used")
+    if linkedin_email.linkedin_observation_confidence != "High":
+        raise AssertionError("LinkedIn observation confidence should be recorded")
 
     formal_email = build_email("Dr. Morgan Smith", "ExampleCo", "Discovery")
     if not formal_email.email.startswith("Dear Dr. Smith,"):
         raise AssertionError("Formal titled contacts must receive a formal greeting")
     if "\nHelmut von Keyserling\n\nStrategic Account Manager" not in formal_email.email:
-        raise AssertionError("Formal titled contacts must receive Helmut's full-name signature")
+        raise AssertionError(
+            "Formal titled contacts must receive Helmut's full-name signature"
+        )
 
     rows = generate_outreach_table(
         pd.DataFrame(
@@ -96,6 +112,13 @@ def main() -> None:
         raise AssertionError("LinkedIn Content rows must be marked available")
     if rows.loc[0, "LinkedIn Content Present"] != "TRUE":
         raise AssertionError("LinkedIn debug content-present flag must be TRUE")
+    for column in (
+        "LinkedIn Observation",
+        "LinkedIn Observation Source",
+        "LinkedIn Observation Confidence",
+    ):
+        if column not in rows.columns:
+            raise AssertionError(f"Missing LinkedIn debug column: {column}")
 
     no_linkedin_rows = generate_outreach_table(
         pd.DataFrame(
@@ -111,7 +134,10 @@ def main() -> None:
     )
     if no_linkedin_rows.loc[0, "Personalization Source"] != "LinkedIn fallback":
         raise AssertionError("Rows without LinkedIn signal must show LinkedIn fallback")
-    if "Given your role at AbbVie, I thought this might be relevant." not in no_linkedin_rows.loc[0, "Email"]:
+    if (
+        "Given your role at AbbVie, I thought this might be relevant."
+        not in no_linkedin_rows.loc[0, "Email"]
+    ):
         raise AssertionError("Fallback observation must use the display company brand")
 
     biomarker_classification = classify_persona(
@@ -121,40 +147,85 @@ def main() -> None:
     if biomarker_classification.persona != "Biomarkers / Bioanalysis":
         raise AssertionError("Biomarker keywords must outrank clinical development")
 
-    operations_email = build_email("Jordan Example", "ExampleCo", "Operations / Low Priority")
+    operations_email = build_email(
+        "Jordan Example", "ExampleCo", "Operations / Low Priority"
+    )
     if operations_email.email != "Review manually":
         raise AssertionError("Operations contacts must be marked for manual review")
 
     story_cases = (
-        ("Computational Biology", "Computational Drug Discovery", "", "drug discovery", "Multiomics"),
-        ("Discovery", "Principal Scientist Lab Head", "", "principal scientist", "Global Discovery Panel"),
-        ("Clinical Pharmacology", "Clinical Pharmacology Oncology", "Oncology", "clinical pharmacology", "Biopharma Services"),
-        ("Immunology", "Immunology Clinical Development", "inflammation", "immunology", "Lipidomics"),
+        (
+            "Computational Biology",
+            "Computational Drug Discovery",
+            "",
+            "drug discovery",
+            "Multiomics",
+        ),
+        (
+            "Discovery",
+            "Principal Scientist Lab Head",
+            "",
+            "principal scientist",
+            "Global Discovery Panel",
+        ),
+        (
+            "Clinical Pharmacology",
+            "Clinical Pharmacology Oncology",
+            "Oncology",
+            "clinical pharmacology",
+            "Biopharma Services",
+        ),
+        (
+            "Immunology",
+            "Immunology Clinical Development",
+            "inflammation",
+            "immunology",
+            "Lipidomics",
+        ),
     )
     for persona, title, area, keyword, expected in story_cases:
         story = recommend_metabolon_story(persona, title, area, keyword)
         if story.recommended_offering != expected:
-            raise AssertionError(f"{persona} expected {expected}, got {story.recommended_offering}")
+            raise AssertionError(
+                f"{persona} expected {expected}, got {story.recommended_offering}"
+            )
 
     integrity = validate_contact_integrity("AstraZeneca", "alex.phipps@bayer.com", "")
     if integrity.status != "RED":
         raise AssertionError("Conflicting company/email data must be RED")
 
-    draft_rows = pd.DataFrame([{"To": "recipient@example.com", "Subject": "Subject", "Body": sample.email}])
+    draft_rows = pd.DataFrame(
+        [{"To": "recipient@example.com", "Subject": "Subject", "Body": sample.email}]
+    )
     unset_zip = EMLDraftProvider(sender_email="").export(draft_rows)
     with ZipFile(BytesIO(unset_zip)) as archive:
         unset_message = message_from_bytes(archive.read("contact_001.eml"))
-    if SENDER_NOT_CONFIGURED_NOTE not in unset_message.get_payload(decode=True).decode():
+    if (
+        SENDER_NOT_CONFIGURED_NOTE
+        not in unset_message.get_payload(decode=True).decode()
+    ):
         raise AssertionError("EML must include sender selection note when unset")
 
     graph_rows = pd.DataFrame(
         [
-            {"To": "ok@example.com", "Subject": "Subject", "Email": sample.email, "Integrity Status": "GREEN"},
-            {"To": "red@example.com", "Subject": "Review Required", "Email": "Review Required", "Integrity Status": "RED"},
+            {
+                "To": "ok@example.com",
+                "Subject": "Subject",
+                "Email": sample.email,
+                "Integrity Status": "GREEN",
+            },
+            {
+                "To": "red@example.com",
+                "Subject": "Review Required",
+                "Email": "Review Required",
+                "Integrity Status": "RED",
+            },
         ]
     )
     graph_drafts = build_outlook_graph_draft_table(graph_rows)
-    if graph_drafts.to_dict("records") != [{"To": "ok@example.com", "Subject": "Subject", "Body": sample.email}]:
+    if graph_drafts.to_dict("records") != [
+        {"To": "ok@example.com", "Subject": "Subject", "Body": sample.email}
+    ]:
         raise AssertionError("Microsoft Graph draft creation must skip RED contacts")
 
     print("Outreach Engine V5 checks passed.")
