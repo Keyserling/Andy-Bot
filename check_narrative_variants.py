@@ -1,4 +1,4 @@
-"""Local checks for Challenger Outreach Engine V4."""
+"""Local checks for Outreach Engine V5."""
 
 from __future__ import annotations
 
@@ -30,24 +30,29 @@ FORBIDDEN_EMAIL_TEXT = (
     "Metabolomics helps",
     "We offer",
     "Our platform can",
-    "My name is Helmut",
 )
 
 
 def main() -> None:
     sample = build_email("Taylor Example", "ExampleCo", "Discovery")
-    if sample.narrative_variant_id != "ENGINE-V4":
-        raise AssertionError("Engine V4 must use one deterministic variant id")
+    if sample.narrative_variant_id != "ENGINE-V5":
+        raise AssertionError("Engine V5 must use one deterministic variant id")
     if sample.email != build_email("Taylor Example", "ExampleCo", "Discovery").email:
         raise AssertionError("Identical inputs must generate identical email text")
     if "+49 176 61356899" not in sample.email:
         raise AssertionError("Signature must include Helmut's phone number")
+    if "Strategic Account Manager, Pharma International" not in sample.email:
+        raise AssertionError("Signature must include Helmut's title")
+    if "hvonkeyserling@metabolon.com" not in sample.email:
+        raise AssertionError("Signature must include Helmut's email address")
+    if "\nHelmut\n\nStrategic Account Manager" not in sample.email:
+        raise AssertionError("First-name greetings must sign with Helmut")
     if "Given your role at ExampleCo, I thought this might be relevant." not in sample.email:
         raise AssertionError("Missing required no-LinkedIn fallback observation")
     if "Are we doing enough" in sample.email:
         raise AssertionError("Email should create FOMO without using the goal phrase literally")
-    if "standard biomarker, mechanism, translational, and patient-stratification workstreams" not in sample.email:
-        raise AssertionError("Challenger narrative must frame industry adoption")
+    if "routine biomarker, mechanism, translational, and patient-stratification workstreams" not in sample.email:
+        raise AssertionError("V5 narrative must frame industry adoption")
     if "Would it be worth comparing notes?" not in sample.email:
         raise AssertionError("CTA should invite discussion rather than sell services")
     for phrase in FORBIDDEN_EMAIL_TEXT:
@@ -61,10 +66,16 @@ def main() -> None:
         linkedin_content_available="Yes",
         linkedin_content_preview="Recent focus on PK/PD strategy in oncology and target engagement.",
     )
-    if "Your recent focus on PK/PD caught my attention." not in linkedin_email.email:
-        raise AssertionError("LinkedIn-derived observation should lead the email")
+    if "Interesting to see your focus in oncology." not in linkedin_email.email:
+        raise AssertionError("LinkedIn-derived observation should use the highest-priority true signal")
     if linkedin_email.personalization_source != "LinkedIn":
         raise AssertionError("LinkedIn source should be recorded when a signal is used")
+
+    formal_email = build_email("Dr. Morgan Smith", "ExampleCo", "Discovery")
+    if not formal_email.email.startswith("Dear Dr. Smith,"):
+        raise AssertionError("Formal titled contacts must receive a formal greeting")
+    if "\nHelmut von Keyserling\n\nStrategic Account Manager" not in formal_email.email:
+        raise AssertionError("Formal titled contacts must receive Helmut's full-name signature")
 
     rows = generate_outreach_table(
         pd.DataFrame(
@@ -144,7 +155,7 @@ def main() -> None:
     if graph_drafts.to_dict("records") != [{"To": "ok@example.com", "Subject": "Subject", "Body": sample.email}]:
         raise AssertionError("Microsoft Graph draft creation must skip RED contacts")
 
-    print("Challenger Outreach Engine V4 checks passed.")
+    print("Outreach Engine V5 checks passed.")
 
 
 if __name__ == "__main__":
