@@ -16,7 +16,12 @@ from typing import Any, NamedTuple
 import pandas as pd
 import streamlit as st
 
-from draft_exports import CSVDraftProvider, EMLDraftProvider
+from draft_exports import (
+    CSVDraftProvider,
+    EMLDraftProvider,
+    OutlookGraphAuthRequired,
+    OutlookGraphDraftProvider,
+)
 from metabolon_knowledge import MetabolonStory, recommend_metabolon_story
 from narratives import get_narrative_set
 
@@ -1184,6 +1189,8 @@ def initialize_session_state() -> None:
         "generated_emails": empty_output_table(),
         "outlook_draft_csv": b"",
         "outlook_draft_zip": b"",
+        "outlook_graph_device_flow": None,
+        "outlook_graph_created_count": 0,
         "linkedin_text_by_contact": {},
         "selected_linkedin_contact": "",
     }
@@ -1447,6 +1454,8 @@ def main() -> None:
         st.session_state.generated_emails = empty_output_table()
         st.session_state.outlook_draft_csv = b""
         st.session_state.outlook_draft_zip = b""
+        st.session_state.outlook_graph_device_flow = None
+        st.session_state.outlook_graph_created_count = 0
         st.session_state.linkedin_text_by_contact = {}
         st.session_state.selected_linkedin_contact = ""
         st.success(
@@ -1468,6 +1477,8 @@ def main() -> None:
             )
             st.session_state.outlook_draft_csv = b""
             st.session_state.outlook_draft_zip = b""
+            st.session_state.outlook_graph_device_flow = None
+            st.session_state.outlook_graph_created_count = 0
         except Exception as exc:
             st.error(f"Could not generate emails: {exc}")
             return
@@ -1542,17 +1553,45 @@ def main() -> None:
 
         st.subheader("Outlook Draft Export")
         st.caption(
-            "Create Outlook-ready draft files with To, Subject, and Body for review before sending."
+            "Create drafts directly in Outlook with Microsoft Graph, or download CSV/ZIP as a fallback."
         )
         if st.button("Create Outlook Drafts"):
             try:
-                (
-                    st.session_state.outlook_draft_csv,
-                    st.session_state.outlook_draft_zip,
-                ) = build_outlook_draft_exports(st.session_state.generated_emails)
+                draft_table = build_draft_table(st.session_state.generated_emails)
+                provider = OutlookGraphDraftProvider()
+                if st.session_state.outlook_graph_device_flow:
+                    provider.complete_device_authentication(
+                        st.session_state.outlook_graph_device_flow
+                    )
+                    st.session_state.outlook_graph_device_flow = None
+                created_count = provider.create_drafts(draft_table)
+                st.session_state.outlook_graph_created_count = created_count
+                st.success(f"{created_count} Outlook drafts created successfully")
+            except OutlookGraphAuthRequired as exc:
+                st.session_state.outlook_graph_device_flow = exc.flow
+                st.info(str(exc))
+                return
             except Exception as exc:
                 st.error(f"Could not create Outlook drafts: {exc}")
                 return
+
+        if st.session_state.outlook_graph_device_flow:
+            flow = st.session_state.outlook_graph_device_flow
+            st.warning(
+                "Outlook authentication pending. Open "
+                f"{flow['verification_uri']} and enter code {flow['user_code']}, "
+                "then click Create Outlook Drafts again."
+            )
+        if st.session_state.outlook_graph_created_count:
+            st.success(
+                f"{st.session_state.outlook_graph_created_count} Outlook drafts created successfully"
+            )
+
+        if not st.session_state.outlook_draft_csv or not st.session_state.outlook_draft_zip:
+            (
+                st.session_state.outlook_draft_csv,
+                st.session_state.outlook_draft_zip,
+            ) = build_outlook_draft_exports(st.session_state.generated_emails)
 
         if st.session_state.outlook_draft_csv and st.session_state.outlook_draft_zip:
             st.download_button(

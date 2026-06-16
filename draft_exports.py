@@ -6,10 +6,12 @@ They intentionally do not classify contacts or generate narrative copy.
 
 from __future__ import annotations
 
+import json
 import os
 from abc import ABC, abstractmethod
 from email.message import EmailMessage
 from io import BytesIO
+from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
 import pandas as pd
@@ -18,6 +20,23 @@ DRAFT_COLUMNS = ["To", "Subject", "Body"]
 DEFAULT_SENDER_NAME = "Helmut von Keyserling"
 DEFAULT_SENDER_EMAIL = "helmut.vonkeyserling@metabolon.com"
 SENDER_NOT_CONFIGURED_NOTE = "Open as draft and choose sender in Outlook."
+GRAPH_AUTHORITY = "https://login.microsoftonline.com/common"
+GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
+GRAPH_SCOPES = ["Mail.ReadWrite"]
+TOKEN_CACHE_SERVICE = "andy-bot-microsoft-graph"
+TOKEN_CACHE_USERNAME = "outlook-drafts"
+TOKEN_CACHE_PATH = Path.home() / ".andy_bot" / "ms_graph_token_cache.json"
+
+
+class OutlookGraphAuthRequired(RuntimeError):
+    """Raised when the user must complete Microsoft device-code authentication."""
+
+    def __init__(self, flow: dict[str, str]) -> None:
+        self.flow = flow
+        super().__init__(
+            "Authenticate Outlook once, then click Create Outlook Drafts again. "
+            f"Open {flow['verification_uri']} and enter code {flow['user_code']}."
+        )
 
 
 class DraftProvider(ABC):
@@ -66,12 +85,122 @@ class EMLDraftProvider(DraftProvider):
 
 
 class OutlookGraphDraftProvider(DraftProvider):
-    """Placeholder for future Microsoft Graph draft creation."""
+    """Create Outlook drafts with Microsoft Graph without sending them."""
+
+    def __init__(self, client_id: str | None = None) -> None:
+        self.client_id = client_id or os.getenv("MS_GRAPH_CLIENT_ID", "")
+        if not self.client_id:
+            raise ValueError(
+                "Set MS_GRAPH_CLIENT_ID to an Azure public-client app ID with "
+                "Mail.ReadWrite permission."
+            )
+        import msal
+
+        self.msal = msal
+        self.cache = msal.SerializableTokenCache()
+        self._load_cache()
+        self.app = msal.PublicClientApplication(
+            self.client_id,
+            authority=GRAPH_AUTHORITY,
+            token_cache=self.cache,
+        )
 
     def export(self, drafts: pd.DataFrame) -> bytes:
-        raise NotImplementedError(
-            "Outlook Graph API draft creation is not implemented yet."
-        )
+        created_count = self.create_drafts(drafts)
+        return json.dumps({"created": created_count}).encode("utf-8")
+
+    def create_drafts(self, drafts: pd.DataFrame) -> int:
+        """Create one unsent Outlook draft for each supplied draft row."""
+        access_token = self._get_access_token()
+        created_count = 0
+        for draft in drafts[DRAFT_COLUMNS].itertuples(index=False):
+            import requests
+
+            response = requests.post(
+                f"{GRAPH_BASE_URL}/me/messages",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "subject": str(draft.Subject),
+                    "body": {
+                        "contentType": "Text",
+                        "content": str(draft.Body),
+                    },
+                    "toRecipients": [
+                        {"emailAddress": {"address": str(draft.To).strip()}}
+                    ],
+                },
+                timeout=30,
+            )
+            if response.status_code != 201:
+                raise RuntimeError(
+                    f"Microsoft Graph draft creation failed ({response.status_code}): {response.text}"
+                )
+            created_count += 1
+        return created_count
+
+    def _get_access_token(self) -> str:
+        accounts = self.app.get_accounts()
+        result = None
+        if accounts:
+            result = self.app.acquire_token_silent(GRAPH_SCOPES, account=accounts[0])
+        if not result:
+            flow = self.app.initiate_device_flow(scopes=GRAPH_SCOPES)
+            if "user_code" not in flow:
+                raise RuntimeError(
+                    "Could not start Microsoft Graph device authentication."
+                )
+            raise OutlookGraphAuthRequired(flow)
+        if "access_token" not in result:
+            raise RuntimeError(
+                result.get(
+                    "error_description",
+                    "Could not authenticate with Microsoft Graph.",
+                )
+            )
+        self._save_cache()
+        return result["access_token"]
+
+    def complete_device_authentication(self, flow: dict[str, str]) -> str:
+        """Complete a previously initiated device-code flow and persist the access token."""
+        result = self.app.acquire_token_by_device_flow(flow)
+        if "access_token" not in result:
+            raise RuntimeError(
+                result.get(
+                    "error_description",
+                    "Could not authenticate with Microsoft Graph.",
+                )
+            )
+        self._save_cache()
+        return result["access_token"]
+
+    def _load_cache(self) -> None:
+        cache_blob = None
+        try:
+            import keyring
+
+            cache_blob = keyring.get_password(TOKEN_CACHE_SERVICE, TOKEN_CACHE_USERNAME)
+        except Exception:
+            cache_blob = None
+        if cache_blob is None and TOKEN_CACHE_PATH.exists():
+            cache_blob = TOKEN_CACHE_PATH.read_text(encoding="utf-8")
+        if cache_blob:
+            self.cache.deserialize(cache_blob)
+
+    def _save_cache(self) -> None:
+        if not self.cache.has_state_changed:
+            return
+        cache_blob = self.cache.serialize()
+        try:
+            import keyring
+
+            keyring.set_password(TOKEN_CACHE_SERVICE, TOKEN_CACHE_USERNAME, cache_blob)
+        except Exception:
+            TOKEN_CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
+            TOKEN_CACHE_PATH.write_text(cache_blob, encoding="utf-8")
+            TOKEN_CACHE_PATH.chmod(0o600)
 
 
 class GmailDraftProvider(DraftProvider):
