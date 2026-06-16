@@ -408,6 +408,42 @@ def get_contact_first_name(name: str, source_first_name: str = "") -> str:
     return "Colleague"
 
 
+def build_salutation_and_signature_name(
+    name: str, source_first_name: str = ""
+) -> tuple[str, str]:
+    """Return the email greeting and signature name according to V5 formality rules."""
+    compact_name = " ".join((name or "").split())
+    title_match = re.match(
+        r"^(?P<title>Dr\.?|Prof\.?|Professor)\s+(?P<rest>.+)$",
+        compact_name,
+        re.I,
+    )
+    if title_match:
+        title = title_match.group("title").rstrip(".")
+        title = "Prof." if title.lower() in {"prof", "professor"} else "Dr."
+        surname_parts = re.findall(
+            r"[^\W\d_](?:[^\W\d_]|[.'’\-])*",
+            title_match.group("rest"),
+            re.UNICODE,
+        )
+        if surname_parts:
+            return f"{title} {surname_parts[-1]}", "Helmut von Keyserling"
+
+    return get_contact_first_name(name, source_first_name), "Helmut"
+
+
+def build_signature(signature_name: str) -> str:
+    """Return the full V5 Metabolon signature block."""
+    return (
+        "Best regards,\n\n"
+        f"{signature_name}\n\n"
+        "Strategic Account Manager, Pharma International\n"
+        "Metabolon, Inc.\n\n"
+        "hvonkeyserling@metabolon.com\n"
+        "+49 176 61356899"
+    )
+
+
 FREE_EMAIL_DOMAINS = {
     "gmail.com",
     "yahoo.com",
@@ -752,7 +788,7 @@ def generate_contact_narrative(
 
 
 def build_scientific_story(story: MetabolonStory) -> str:
-    """Build a challenger narrative around industry adoption and biological insight gaps."""
+    """Build a V5 industry-reality paragraph around adoption and biological insight gaps."""
     offering = (story.recommended_offering or "Global Discovery Panel").strip()
     problem = story.scientific_problem or "extracting biological insight from available samples"
 
@@ -760,27 +796,27 @@ def build_scientific_story(story: MetabolonStory) -> str:
         return (
             "Across US pharma, I am increasingly seeing metabolomics and multiomics move "
             "from specialist projects into routine translational, biomarker, and PK/PD decision making. "
-            f"What has surprised me is not the interest in these data, but how differently teams approach {problem}. "
-            "Many groups already have samples that could answer important biological questions; the bottleneck is often turning those samples into interpretable biology before the next program decision."
+            "Many organizations now have access to large amounts of molecular data. "
+            f"The challenge is increasingly how to turn those data into actionable biological insight in areas such as {problem}."
         )
     if offering == "Lipidomics":
         return (
             "Across US pharma, I am increasingly seeing metabolomics and multiomics move "
             "from specialist projects into routine biomarker, translational, and patient-stratification workstreams. "
-            f"What has surprised me is how often {problem} becomes a decision gap rather than a data-generation gap. "
-            "Many groups already have the right cohorts or stored biospecimens; the question is whether they are extracting enough biological signal from them."
+            "Many organizations now have access to large amounts of molecular data. "
+            f"The challenge is increasingly how to turn those data into actionable biological insight in areas such as {problem}."
         )
     if offering == "Multiomics":
         return (
             "Across US pharma, I am increasingly seeing multiomics become part of routine mechanism, biomarker, and translational decision making. "
-            f"What has surprised me is not the volume of data being generated, but how unevenly organizations approach {problem}. "
-            "The advantage increasingly goes to teams that can connect existing sample sets across molecular layers and convert them into clear biological interpretation."
+            "Many organizations now have access to large amounts of molecular data. "
+            f"The challenge is increasingly how to turn those data into actionable biological insight in areas such as {problem}."
         )
     return (
         "Across US pharma, I am increasingly seeing metabolomics and multiomics move "
-        "from exploratory science into standard biomarker, mechanism, translational, and patient-stratification workstreams. "
-        f"What has surprised me is how often the hard part is {problem}, not generating another dataset. "
-        "Many groups already have samples that could answer important biological questions; the challenge is whether those samples are being used aggressively enough to inform development decisions."
+        "from specialist projects into routine biomarker, mechanism, translational, and patient-stratification workstreams. "
+        "Many organizations now have access to large amounts of molecular data. "
+        f"The challenge is increasingly how to turn those data into actionable biological insight in areas such as {problem}."
     )
 
 
@@ -831,32 +867,6 @@ def extract_role_change_observation(linkedin_text: str) -> str:
 
 PERSONAL_OBSERVATION_PATTERNS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     (
-        "Conference participation",
-        ("conference", "congress", "asco", "aacr", "eular", "ash", "esmo"),
-        "Your recent conference participation around {signal} caught my attention.",
-    ),
-    (
-        "Publication",
-        ("publication", "published", "manuscript", "paper", "author", "co-author"),
-        "Your recent publication activity around {signal} caught my attention.",
-    ),
-    (
-        "Scientific interest",
-        (
-            "pk/pd",
-            "biomarker",
-            "patient stratification",
-            "precision medicine",
-            "target engagement",
-            "drug discovery",
-            "multiomics",
-            "multi-omics",
-            "systems biology",
-            "federated ai",
-        ),
-        "Your recent focus on {signal} caught my attention.",
-    ),
-    (
         "Therapeutic focus",
         (
             "oncology",
@@ -869,7 +879,44 @@ PERSONAL_OBSERVATION_PATTERNS: tuple[tuple[str, tuple[str, ...], str], ...] = (
             "cardiometabolic",
             "metabolic disease",
         ),
-        "Interesting to see your work in {signal}.",
+        "Interesting to see your focus in {signal}.",
+    ),
+    (
+        "Scientific focus",
+        (
+            "pk/pd",
+            "biomarker",
+            "patient stratification",
+            "precision medicine",
+            "target engagement",
+            "drug discovery",
+            "multiomics",
+            "multi-omics",
+            "systems biology",
+            "federated ai",
+        ),
+        "Interesting to see your focus on {signal}.",
+    ),
+    (
+        "Publication topic",
+        ("publication", "published", "manuscript", "paper", "author", "co-author"),
+        "I noticed your recent publication activity around {signal}.",
+    ),
+    (
+        "Conference activity",
+        ("conference", "congress", "asco", "aacr", "eular", "ash", "esmo"),
+        "I noticed your recent conference activity around {signal}.",
+    ),
+    (
+        "Stated responsibility",
+        (
+            "translational medicine",
+            "clinical development",
+            "biomarker development",
+            "bioanalysis",
+            "clinical pharmacology",
+        ),
+        "I noticed your focus across {signal}.",
     ),
 )
 
@@ -937,11 +984,13 @@ def build_email(
     linkedin_hook_type: str = "",
     linkedin_hook_used: str = "No",
 ) -> ContactOutreach:
-    """Build deterministic Challenger Outreach Engine V4 email copy."""
+    """Build deterministic Outreach Engine V5 email copy."""
     integrity = integrity or ContactIntegrity(
         "YELLOW", "Company cannot be confirmed.", company, ""
     )
-    first_name = get_contact_first_name(name, source_first_name)
+    salutation_name, signature_name = build_salutation_and_signature_name(
+        name, source_first_name
+    )
     company_text = display_company_brand(company)
     linkedin_content_present = linkedin_content_present_flag(linkedin_content_preview)
     linkedin_summary = summarize_linkedin_content(linkedin_content_preview)
@@ -1024,18 +1073,20 @@ def build_email(
         linkedin_content_preview, company_text
     )
     scientific_story = build_scientific_story(metabolon_story)
+    authority_statement = (
+        "At Metabolon, we have had a front-row seat to this shift through our work "
+        "across pharmaceutical programs over the last 25 years."
+    )
     subject = f"A question on {contact_narrative.rstrip('.').lower()}"
     email = (
-        f"Dear {first_name},\n\n"
+        f"Dear {salutation_name},\n\n"
         f"{observation}\n\n"
-        "I work with pharmaceutical R&D organizations at Metabolon, where we sit close to "
-        "how large development teams are standardizing metabolomics and multiomics across programs.\n\n"
+        "My name is Helmut von Keyserling, and I work with pharmaceutical R&D organizations at Metabolon.\n\n"
         f"{scientific_story}\n\n"
-        f"I would be interested in how {company_text} currently thinks about this area, particularly given how quickly adoption appears to be increasing across the industry. "
+        f"{authority_statement}\n\n"
+        f"I would be interested in how {company_text} currently thinks about this area. "
         "Would it be worth comparing notes?\n\n"
-        "Best regards,\n\n"
-        "Helmut von Keyserling\n"
-        "+49 176 61356899"
+        f"{build_signature(signature_name)}"
     )
     if used_emails is not None:
         used_emails.add(email)
@@ -1054,7 +1105,7 @@ def build_email(
         contact_narrative,
         contact_narrative_score,
         matched_keyword,
-        "ENGINE-V4",
+        "ENGINE-V5",
         metabolon_story.primary_capability,
         metabolon_story.recommended_offering,
         metabolon_story.scientific_problem,

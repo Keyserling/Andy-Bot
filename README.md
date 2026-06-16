@@ -17,10 +17,10 @@ Andy Bot is a Streamlit app for generating deterministic Metabolon outreach from
    - Safety / Quality
    - Translational / Clinical Development
 3. Before email generation, Andy Bot validates contact integrity using Company, Email Address, LinkedIn Current Company, and LinkedIn Current Title when those fields are available.
-4. Challenger Outreach Engine V4 generates one sentence for what the person likely cares about.
+4. Outreach Engine V5 generates one sentence for what the person likely cares about.
 5. It generates exactly one LinkedIn observation. If no LinkedIn-derived observation exists, it uses: `Given your role at [Company], I thought this might be relevant.`
-6. It selects one Metabolon story from the Metabolon Knowledge Database and creates a deterministic industry adoption → insight bottleneck → discussion story.
-7. It assembles the email as Observation, category-context introduction, challenger narrative, CTA, and Helmut von Keyserling's signature with `+49 176 61356899`.
+6. It selects one Metabolon story from the Metabolon Knowledge Database and creates a deterministic industry reality → Metabolon perspective → discussion story.
+7. It assembles the email as LinkedIn observation, Helmut's introduction, industry reality, Metabolon perspective, CTA, and Helmut's full signature with role, company, email, and `+49 176 61356899`.
 8. It generates and exports a table with one row per contact, including:
    - Name
    - Company
@@ -76,7 +76,7 @@ Run syntax checks:
 python -m py_compile app.py metabolon_knowledge.py draft_exports.py check_narrative_variants.py
 ```
 
-Run the Challenger Outreach Engine V4 check:
+Run the Outreach Engine V5 check:
 
 ```bash
 python check_narrative_variants.py
