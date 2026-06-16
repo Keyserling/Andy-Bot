@@ -3,13 +3,12 @@
 Workflow:
 1. Upload a CSV contact list.
 2. Classify each contact into one persona.
-3. Randomly select from persona-specific subject and use-case variants.
+3. Generate deterministic outreach with one LinkedIn observation and one Metabolon knowledge story.
 4. Generate Name, Company, Persona, Subject, and Email for CSV export.
 """
 
 from __future__ import annotations
 
-import random
 import re
 from typing import Any, NamedTuple
 
@@ -24,7 +23,6 @@ from draft_exports import (
     is_outlook_graph_configured,
 )
 from metabolon_knowledge import MetabolonStory, recommend_metabolon_story
-from narratives import get_narrative_set
 
 OLD_TO_NEW_PERSONA = {
     "Translational Research": "Translational / Clinical Development",
@@ -712,123 +710,17 @@ def identify_persona(contact: pd.Series, role_columns: list[str]) -> str:
     return classify_persona(contact, role_columns).persona
 
 
-def _story_persona(persona: str, story: MetabolonStory) -> str:
-    """Choose the narrative library persona from the recommended Metabolon story."""
-    if story.recommended_offering == "Bioinformatics / Multiomics Software":
-        return "Discovery"
-    if story.recommended_offering == "Lipidomics":
-        return "Immunology" if "Immunology" in get_narrative_personas() else "Discovery"
-    if (
-        story.recommended_offering == "Biopharma Services"
-        and persona == "Clinical Pharmacology"
-    ):
-        return "Clinical Pharmacology"
-    if story.recommended_offering == "Global Discovery Panel" and persona in (
-        "Oncology",
-        "Safety / Quality",
-    ):
-        return persona
-    if persona in get_narrative_personas():
-        return persona
-    return "Discovery"
-
-
-def get_narrative_personas() -> tuple[str, ...]:
-    """Return supported narrative personas without exposing library internals here."""
-    from narratives import PERSONAS
-
-    return PERSONAS
-
-
-CONTACT_NARRATIVE_PATTERNS: tuple[tuple[str, tuple[str, ...], str], ...] = (
-    (
-        "Computational Biology",
-        (
-            "computational",
-            "ai",
-            "in silico",
-            "modeling",
-            "modelling",
-            "bioinformatics",
-            "systems biology",
-        ),
-        "Connecting computational predictions with functional biological evidence.",
-    ),
-    (
-        "Clinical Pharmacology",
-        (
-            "clinical pharmacology",
-            "pk/pd",
-            "pharmacokinetic",
-            "pharmacodynamic",
-            "dose",
-            "exposure response",
-        ),
-        "Connecting dose, exposure, and biological response in human samples.",
-    ),
-    (
-        "Immunology",
-        ("immunology", "autoimmune", "inflammation", "immune"),
-        "Understanding treatment response and patient heterogeneity in immunology programs.",
-    ),
-    (
-        "Oncology",
-        ("oncology", "cancer", "tumor", "tumour", "immuno-oncology"),
-        "Understanding tumor biology, resistance, and patient heterogeneity across oncology programs.",
-    ),
-    (
-        "Safety / Quality",
-        ("safety", "quality", "pharmacovigilance", "risk", "toxicology", "toxicity"),
-        "Understanding biological context around safety and risk-related observations.",
-    ),
-    (
-        "Biomarkers / Bioanalysis",
-        (
-            "biomarker",
-            "bioanalysis",
-            "bioanalytical",
-            "assay",
-            "patient stratification",
-        ),
-        "Finding biologically meaningful markers that explain response, stratification, and disease activity.",
-    ),
-    (
-        "Translational / Clinical Development",
-        ("translational", "clinical development", "clinical trial", "clinical study"),
-        "Interpreting patient sample evidence to guide clinical development programs.",
-    ),
-    (
-        "Discovery",
-        ("discovery", "target", "screening", "biology", "multiomics", "multi-omics"),
-        "Understanding functional biology that helps prioritize targets, models, and compounds.",
-    ),
-)
-
-PERSONA_DEFAULT_NARRATIVES = {
-    "Computational Biology": "Connecting computational predictions with functional biological evidence.",
-    "Clinical Pharmacology": "Connecting dose, exposure, and biological response in human samples.",
-    "Immunology": "Understanding treatment response and patient heterogeneity in immunology programs.",
-    "Oncology": "Understanding tumor biology, resistance, and patient heterogeneity across oncology programs.",
-    "Safety / Quality": "Understanding biological context around safety and risk-related observations.",
-    "Biomarkers / Bioanalysis": "Finding biologically meaningful markers that explain response, stratification, and disease activity.",
-    "Translational / Clinical Development": "Interpreting patient sample evidence to guide clinical development programs.",
-    "Discovery": "Understanding functional biology that helps prioritize targets, models, and compounds.",
+CARE_STATEMENTS = {
+    "Computational Biology": "Multiomics interpretation for computational biology.",
+    "Clinical Pharmacology": "PK/PD interpretation in clinical samples.",
+    "Immunology": "Patient stratification in immunology.",
+    "Oncology": "Translational decision making in oncology.",
+    "Safety / Quality": "Mechanistic context for safety and risk signals.",
+    "Biomarkers / Bioanalysis": "Biomarker discovery and patient stratification.",
+    "Translational / Clinical Development": "Translational decision making.",
+    "Discovery": "Biomarker discovery and mechanism understanding.",
+    "Medical Affairs": "Biological evidence for scientific exchange.",
 }
-
-
-def contact_narrative_confidence(
-    narrative: str,
-    persona_confidence_score: float,
-    matched_keyword: str,
-    text_matched: bool,
-) -> float:
-    """Score confidence that the contact narrative reflects the contact role."""
-    score = persona_confidence_score
-    if matched_keyword:
-        score += 0.04
-    if text_matched:
-        score += 0.04
-    return round(min(score, 0.98), 2)
 
 
 def generate_contact_narrative(
@@ -838,90 +730,54 @@ def generate_contact_narrative(
     matched_keyword: str,
     persona_confidence_score: float,
 ) -> tuple[str, float]:
-    """Infer what this person most likely cares about in their current role."""
+    """Return one deterministic sentence for what this person likely cares about."""
     active_persona = map_persona(persona)
     combined_text = " ".join(
-        part
-        for part in (active_persona, title, therapeutic_area, matched_keyword)
-        if part
+        part for part in (active_persona, title, therapeutic_area, matched_keyword) if part
     ).lower()
-    for pattern_persona, signals, narrative in CONTACT_NARRATIVE_PATTERNS:
-        if active_persona == pattern_persona or any(
-            pattern_matches(combined_text, signal) for signal in signals
-        ):
-            return narrative, contact_narrative_confidence(
-                narrative, persona_confidence_score, matched_keyword, True
-            )
-    narrative = PERSONA_DEFAULT_NARRATIVES.get(
-        active_persona,
-        "Understanding biological mechanisms that can inform program decisions.",
-    )
-    return narrative, contact_narrative_confidence(
-        narrative, persona_confidence_score, matched_keyword, False
-    )
+    if "pk/pd" in combined_text or "pharmacology" in combined_text:
+        narrative = "PK/PD interpretation in clinical samples."
+    elif "immun" in combined_text or "inflammation" in combined_text:
+        narrative = "Patient stratification in immunology."
+    elif "oncology" in combined_text or "cancer" in combined_text:
+        narrative = "PK/PD interpretation in oncology."
+    elif "biomarker" in combined_text or "bioanalysis" in combined_text:
+        narrative = "Biomarker discovery."
+    elif "translational" in combined_text or "clinical development" in combined_text:
+        narrative = "Translational decision making."
+    else:
+        narrative = CARE_STATEMENTS.get(active_persona, "Translational decision making.")
+    confidence = round(min(persona_confidence_score + (0.04 if matched_keyword else 0), 0.98), 2)
+    return narrative, confidence
 
 
-def build_contact_story(
-    contact_narrative: str,
-    persona: str,
-    story: MetabolonStory,
-    use_case: str,
-    benefits: tuple[str, ...],
-) -> str:
-    """Create a concise, human scientific narrative from the Metabolon knowledge layer."""
+def build_scientific_story(story: MetabolonStory) -> str:
+    """Build one Problem -> Why it matters -> How metabolomics helps story from Metabolon knowledge."""
     offering = (story.recommended_offering or "Global Discovery Panel").strip()
+    problem = story.scientific_problem or "understanding biological mechanisms from available samples"
 
     if offering == "Biopharma Services":
         return (
-            "Many teams are trying to understand why patients with apparently similar "
-            "clinical characteristics respond differently to treatment. Those differences "
-            "can be hard to interpret when endpoint, PK, or biomarker data show the outcome "
-            "but not the underlying metabolic changes. Metabolomics adds a functional biology "
-            "readout and can help connect clinical observations with pathway activity, mechanism "
-            "understanding, and biomarkers in samples already collected in studies."
+            f"A common problem is {problem}. "
+            "That matters because clinical endpoints, PK, and biomarker data can show outcomes without explaining the biology behind them. "
+            "Metabolomics helps by adding a functional readout of patient sample biology that connects observations with pathway activity, mechanism understanding, and translational development decisions."
         )
-
     if offering == "Lipidomics":
         return (
-            "One challenge in inflammatory and cardiometabolic programs is determining "
-            "whether clinical effects reflect meaningful differences in lipid signaling, "
-            "immune activity, or metabolic state between patient groups. Standard endpoints "
-            "often show that a change occurred, but not which processes may be contributing. "
-            "Metabolomics can add a functional view of lipid and small-molecule activity in "
-            "available biospecimens. That can help teams distinguish baseline heterogeneity, "
-            "treatment-related shifts, and markers that may explain progression or variable "
-            "benefit across cohorts."
+            f"A common problem is {problem}. "
+            "That matters because lipid signaling, inflammatory biology, and metabolic state can differ across patient groups even when standard endpoints look similar. "
+            "Metabolomics helps by measuring lipid and small-molecule activity in available biospecimens, supporting interpretation of heterogeneity, treatment-related shifts, and markers of variable benefit."
         )
-
-    if offering == "Bioinformatics / Multiomics Software":
+    if offering == "Multiomics":
         return (
-            "Programs often generate large amounts of molecular and clinical data, yet the "
-            "biological drivers of observed outcomes remain unclear. Transcriptomic, proteomic, and "
-            "metabolomic results can each be informative, but they are difficult to interpret "
-            "when each layer is reviewed separately. Metabolomics provides a functional "
-            "measure of biochemical activity, and integrated analysis can connect those "
-            "measurements with upstream molecular signals and clinical observations. That can "
-            "help teams prioritize findings that are consistent across data types and decide "
-            "which hypotheses merit follow-up."
+            f"A common problem is {problem}. "
+            "That matters because transcriptomic, proteomic, genomic, and metabolomic data are harder to interpret when each layer is reviewed separately. "
+            "Metabolomics helps by providing a functional biochemical layer, and multiomics analysis connects those measurements with upstream molecular signals and clinical observations."
         )
-
-    if offering == "Global Discovery Panel":
-        return (
-            "Programs often generate large amounts of molecular and clinical data, yet the "
-            "biological drivers of observed outcomes remain unclear. This is especially true "
-            "when models, cohorts, or time points look similar by standard readouts but behave "
-            "differently in practice. Metabolomics provides a functional readout of biological "
-            "activity and can help connect those observations with underlying mechanisms using "
-            "existing samples. These data can reveal metabolic differences associated with "
-            "target engagement, treatment effects, resistance, or patient heterogeneity, giving "
-            "teams a more grounded basis for deciding what to investigate next."
-        )
-
     return (
-        "Many teams have clinical or experimental observations that are important but "
-        "difficult to explain from standard readouts alone. Metabolomics can add a functional "
-        "view of biological activity in available samples, helping connect observed outcomes "
-        "with mechanisms that may be worth further study."
+        f"A common problem is {problem}. "
+        "That matters because models, cohorts, or time points can look similar by standard readouts while behaving differently in practice. "
+        "Metabolomics helps through broad biochemical profiling that connects available samples with pathway activity, mechanism understanding, target engagement, treatment effects, resistance, or patient heterogeneity."
     )
 
 
@@ -982,21 +838,6 @@ PERSONAL_OBSERVATION_PATTERNS: tuple[tuple[str, tuple[str, ...], str], ...] = (
         "Your recent publication activity around {signal} caught my attention.",
     ),
     (
-        "Therapeutic focus",
-        (
-            "oncology",
-            "cancer",
-            "immunology",
-            "autoimmune",
-            "inflammation",
-            "rare disease",
-            "neurology",
-            "cardiometabolic",
-            "metabolic disease",
-        ),
-        "Interesting to see your work in {signal}.",
-    ),
-    (
         "Scientific interest",
         (
             "pk/pd",
@@ -1013,64 +854,38 @@ PERSONAL_OBSERVATION_PATTERNS: tuple[tuple[str, tuple[str, ...], str], ...] = (
         "Your recent focus on {signal} caught my attention.",
     ),
     (
-        "Responsibility",
+        "Therapeutic focus",
         (
-            "clinical development",
-            "translational",
-            "portfolio",
-            "strategy",
-            "program lead",
-            "team lead",
-            "head of",
+            "oncology",
+            "cancer",
+            "immunology",
+            "autoimmune",
+            "inflammation",
+            "rare disease",
+            "neurology",
+            "cardiometabolic",
+            "metabolic disease",
         ),
-        "Your responsibilities around {signal} seem closely connected to how teams interpret patient sample data.",
+        "Interesting to see your work in {signal}.",
     ),
 )
 
 
 def build_personal_observation(
     linkedin_text: str,
-    contact_narrative: str,
-    persona: str,
-    title: str,
     company_text: str,
 ) -> tuple[str, str, str]:
-    """Build the email's first observation using LinkedIn first, then narrative, then persona."""
+    """Return one observation from LinkedIn, or the required company-role fallback."""
     if linkedin_text.strip():
         role_change = extract_role_change_observation(linkedin_text)
         if role_change:
             return role_change, "Role change", "Yes"
         normalized_text = linkedin_text.lower()
-        prioritized_patterns = sorted(
-            PERSONAL_OBSERVATION_PATTERNS,
-            key=lambda pattern: 1 if pattern[0] == "Therapeutic focus" else 0,
-        )
-        for hook_type, signals, template in prioritized_patterns:
+        for hook_type, signals, template in PERSONAL_OBSERVATION_PATTERNS:
             for signal in signals:
                 if pattern_matches(normalized_text, signal):
-                    return (
-                        template.format(signal=clean_signal(signal)),
-                        hook_type,
-                        "Yes",
-                    )
-    if contact_narrative:
-        return (
-            f"Your work appears connected to {contact_narrative[0].lower() + contact_narrative[1:]}",
-            "Contact Narrative",
-            "No",
-        )
-    if title:
-        return (
-            f"Your role at {company_text} appears connected to complex program decisions where patient sample data can be important.",
-            "Persona",
-            "No",
-        )
-    return (
-        f"I’m reaching out because teams at {company_text} often face questions where careful interpretation of patient and study samples can make a real difference.",
-        "Persona",
-        "No",
-    )
-
+                    return template.format(signal=clean_signal(signal)), hook_type, "Yes"
+    return f"Given your role at {company_text}, I thought this might be relevant.", "LinkedIn fallback", "No"
 
 def summarize_linkedin_content(linkedin_text: str) -> str:
     """Return a compact debug-only summary of LinkedIn content signals."""
@@ -1091,82 +906,10 @@ def linkedin_content_present_flag(linkedin_text: str) -> str:
     return "TRUE" if linkedin_text.strip() else "FALSE"
 
 
-def build_recipient_relevance(
-    contact_narrative: str, use_case: str, benefits: tuple[str, ...]
-) -> str:
-    """Explain why the scientific problem may matter to this recipient."""
-    benefit = (
-        benefits[0]
-        if benefits
-        else "prioritize follow-up work with stronger biological evidence"
-    )
-    if contact_narrative:
-        return f"For your team, that may be useful when trying to {benefit}."
-    return f"That may be useful when your team needs to {benefit}."
-
-
-LINKEDIN_HOOK_PATTERNS: tuple[tuple[str, tuple[str, ...], str], ...] = (
-    (
-        "Therapeutic area",
-        (
-            "oncology",
-            "cancer",
-            "immunology",
-            "autoimmune",
-            "inflammation",
-            "rare disease",
-            "neurology",
-            "cardiometabolic",
-            "metabolic disease",
-        ),
-        "Your work in {signal} is closely aligned with where metabolomics can add biologically grounded context.",
-    ),
-    (
-        "Biomarker signal",
-        (
-            "biomarker",
-            "translational",
-            "clinical development",
-            "precision medicine",
-            "patient stratification",
-            "pharmacodynamic",
-            "pk/pd",
-        ),
-        "Your work around {signal} points to metabolomics as a practical way to strengthen translational evidence.",
-    ),
-    (
-        "Discovery signal",
-        (
-            "drug discovery",
-            "target discovery",
-            "multiomics",
-            "multi-omics",
-            "systems biology",
-            "computational biology",
-            "bioinformatics",
-        ),
-        "Your work around {signal} connects well with metabolomics as a functional readout for discovery and multi-omics programs.",
-    ),
-    (
-        "Leadership signal",
-        (
-            "strategy",
-            "portfolio",
-            "program lead",
-            "team lead",
-            "head of",
-            "executive director",
-            "vice president",
-        ),
-        "Your work around {signal} suggests a concise, outcome-focused note on metabolomics may be useful.",
-    ),
-)
-
-
 def extract_linkedin_hook(linkedin_text: str) -> tuple[str, str, str]:
-    """Return a short personalization hook when LinkedIn text has a strong signal."""
+    """Return a short observation when LinkedIn text contains an eligible signal."""
     observation, hook_type, hook_used = build_personal_observation(
-        linkedin_text, "", "", "", "your organization"
+        linkedin_text, "your organization"
     )
     if hook_used == "Yes":
         return observation, hook_type, hook_used
@@ -1191,7 +934,7 @@ def build_email(
     linkedin_hook_type: str = "",
     linkedin_hook_used: str = "No",
 ) -> ContactOutreach:
-    """Build outreach from one random subject and one persona-specific use case."""
+    """Build deterministic Outreach Wording Engine V2 email copy."""
     integrity = integrity or ContactIntegrity(
         "YELLOW", "Company cannot be confirmed.", company, ""
     )
@@ -1200,7 +943,7 @@ def build_email(
     linkedin_content_present = linkedin_content_present_flag(linkedin_content_preview)
     linkedin_summary = summarize_linkedin_content(linkedin_content_preview)
     initial_personalization_source = (
-        "LinkedIn" if linkedin_hook_used == "Yes" else "Fallback Persona"
+        "LinkedIn" if linkedin_hook_used == "Yes" else "LinkedIn fallback"
     )
     if integrity.status == "RED":
         return ContactOutreach(
@@ -1267,15 +1010,6 @@ def build_email(
     metabolon_story = recommend_metabolon_story(
         active_persona, title, therapeutic_area, matched_keyword
     )
-    narrative_persona = _story_persona(active_persona, metabolon_story)
-    variant_set = get_narrative_set(narrative_persona)
-    used_emails = used_emails if used_emails is not None else set()
-
-    use_case_options = list(enumerate(variant_set["use_cases"], start=1))
-    subject_options = list(enumerate(variant_set["subjects"], start=1))
-    random.shuffle(use_case_options)
-    random.shuffle(subject_options)
-
     contact_narrative, contact_narrative_score = generate_contact_narrative(
         active_persona,
         title,
@@ -1283,71 +1017,53 @@ def build_email(
         matched_keyword,
         persona_confidence_score,
     )
-    benefits = variant_set["benefits"]
-
-    for use_case_index, use_case in use_case_options:
-        for subject_index, subject_template in subject_options:
-            subject = subject_template.format(company=company_text)
-            contact_story = build_contact_story(
-                contact_narrative, active_persona, metabolon_story, use_case, benefits
-            )
-            observation, hook_type, hook_used = build_personal_observation(
-                linkedin_content_preview,
-                contact_narrative,
-                active_persona,
-                title,
-                company_text,
-            )
-            relevance = build_recipient_relevance(contact_narrative, use_case, benefits)
-            email = (
-                f"Dear {first_name},\n\n"
-                f"{observation}\n\n"
-                "My name is Helmut von Keyserling, and I support "
-                f"{company_text} as Strategic Account Manager at Metabolon.\n\n"
-                f"{contact_story}\n\n"
-                f"{relevance}\n\n"
-                "Would you be open to a short meeting to compare notes on whether this could be relevant "
-                "to any current or upcoming programs?\n\n"
-                "Best regards,\n\n"
-                "Helmut"
-            )
-            if email not in used_emails:
-                used_emails.add(email)
-                variant_id = (
-                    f"{active_persona}-{use_case_index:02d}-S{subject_index:02d}"
-                )
-                return ContactOutreach(
-                    name,
-                    company,
-                    to,
-                    persona,
-                    persona_confidence_score,
-                    integrity.status,
-                    integrity.reason,
-                    integrity.suggested_company,
-                    integrity.suggested_title,
-                    subject,
-                    email,
-                    contact_narrative,
-                    contact_narrative_score,
-                    matched_keyword,
-                    variant_id,
-                    metabolon_story.primary_capability,
-                    metabolon_story.recommended_offering,
-                    metabolon_story.scientific_problem,
-                    metabolon_story.email_story,
-                    linkedin_content_available,
-                    observation,
-                    hook_type,
-                    hook_used,
-                    linkedin_content_preview,
-                    linkedin_content_present,
-                    linkedin_summary,
-                    "LinkedIn" if hook_used == "Yes" else "Fallback Persona",
-                )
-
-    raise ValueError(
-        f"Could not generate a unique {active_persona} email for {name} at {company_text}."
+    observation, hook_type, hook_used = build_personal_observation(
+        linkedin_content_preview, company_text
+    )
+    scientific_story = build_scientific_story(metabolon_story)
+    subject = f"Metabolomics and {contact_narrative.rstrip('.').lower()}"
+    email = (
+        f"Dear {first_name},\n\n"
+        f"{observation}\n\n"
+        "My name is Helmut von Keyserling, and I support "
+        f"{company_text} as Strategic Account Manager at Metabolon.\n\n"
+        f"{scientific_story}\n\n"
+        "Would you be open to a short meeting to compare notes on whether this could be relevant "
+        "to any current or upcoming programs?\n\n"
+        "Best regards,\n\n"
+        "Helmut von Keyserling\n"
+        "+49 176 61356899"
+    )
+    if used_emails is not None:
+        used_emails.add(email)
+    return ContactOutreach(
+        name,
+        company,
+        to,
+        persona,
+        persona_confidence_score,
+        integrity.status,
+        integrity.reason,
+        integrity.suggested_company,
+        integrity.suggested_title,
+        subject,
+        email,
+        contact_narrative,
+        contact_narrative_score,
+        matched_keyword,
+        "ENGINE-V2",
+        metabolon_story.primary_capability,
+        metabolon_story.recommended_offering,
+        metabolon_story.scientific_problem,
+        scientific_story,
+        linkedin_content_available,
+        observation,
+        hook_type,
+        hook_used,
+        linkedin_content_preview,
+        linkedin_content_present,
+        linkedin_summary,
+        "LinkedIn" if hook_used == "Yes" else "LinkedIn fallback",
     )
 
 
@@ -1667,7 +1383,7 @@ def main() -> None:
 
     st.title("🤖 Andy Bot")
     st.caption(
-        "Upload a CSV contact list to classify each contact into a persona and export one varied email per contact."
+        "Upload a CSV contact list to classify each contact into a persona and export one deterministic email per contact."
     )
 
     with st.sidebar:
