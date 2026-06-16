@@ -11,6 +11,7 @@ import pandas as pd
 
 from app import (
     build_email,
+    build_outlook_graph_draft_table,
     classify_persona,
     generate_outreach_table,
     validate_contact_integrity,
@@ -295,6 +296,36 @@ def main() -> None:
     expected_from = "Helmut von Keyserling <helmut.vonkeyserling@metabolon.com>"
     if configured_message.get("From") != expected_from:
         raise AssertionError("EML must set Helmut as From when sender is configured")
+
+    graph_rows = pd.DataFrame(
+        [
+            {
+                "To": "ok@example.com",
+                "Subject": "Subject",
+                "Email": sample_email,
+                "Integrity Status": "GREEN",
+            },
+            {
+                "To": "red@example.com",
+                "Subject": "Review Required",
+                "Email": "Review Required",
+                "Integrity Status": "RED",
+            },
+            {
+                "To": "manual@example.com",
+                "Subject": "Review manually",
+                "Email": "Review manually",
+                "Integrity Status": "GREEN",
+            },
+        ]
+    )
+    graph_drafts = build_outlook_graph_draft_table(graph_rows)
+    if graph_drafts.to_dict("records") != [
+        {"To": "ok@example.com", "Subject": "Subject", "Body": sample_email}
+    ]:
+        raise AssertionError(
+            "Microsoft Graph draft creation must skip RED and review-required contacts"
+        )
 
     print(f"Generated 20 emails with {len(variant_ids)} narrative_variant_id values.")
 

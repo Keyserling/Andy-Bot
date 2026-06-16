@@ -21,6 +21,7 @@ from draft_exports import (
     EMLDraftProvider,
     OutlookGraphAuthRequired,
     OutlookGraphDraftProvider,
+    is_outlook_graph_configured,
 )
 from metabolon_knowledge import MetabolonStory, recommend_metabolon_story
 from narratives import get_narrative_set
@@ -1191,6 +1192,7 @@ def initialize_session_state() -> None:
         "outlook_draft_zip": b"",
         "outlook_graph_device_flow": None,
         "outlook_graph_created_count": 0,
+        "outlook_graph_connected": False,
         "linkedin_text_by_contact": {},
         "selected_linkedin_contact": "",
     }
@@ -1325,6 +1327,21 @@ def build_draft_table(generated_emails: pd.DataFrame) -> pd.DataFrame:
     return generated_emails.rename(columns={"Email": "Body"})[
         ["To", "Subject", "Body"]
     ].copy()
+
+
+def build_outlook_graph_draft_table(generated_emails: pd.DataFrame) -> pd.DataFrame:
+    """Return only contacts eligible for direct Microsoft Graph draft creation."""
+    eligible = generated_emails.copy()
+    if "Integrity Status" in eligible.columns:
+        eligible = eligible[
+            eligible["Integrity Status"].astype(str).str.upper() != "RED"
+        ]
+    eligible = eligible[
+        ~eligible["Email"].astype(str).str.strip().str.lower().isin(
+            {"review required", "review manually", ""}
+        )
+    ]
+    return build_draft_table(eligible)
 
 
 def build_outlook_draft_exports(generated_emails: pd.DataFrame) -> tuple[bytes, bytes]:
@@ -1553,38 +1570,85 @@ def main() -> None:
 
         st.subheader("Outlook Draft Export")
         st.caption(
-            "Create drafts directly in Outlook with Microsoft Graph, or download CSV/ZIP as a fallback."
+            "Create real unsent Outlook drafts with Microsoft Graph. Download EML ZIP remains available as a fallback."
         )
-        if st.button("Create Outlook Drafts"):
-            try:
-                draft_table = build_draft_table(st.session_state.generated_emails)
-                provider = OutlookGraphDraftProvider()
-                if st.session_state.outlook_graph_device_flow:
-                    provider.complete_device_authentication(
-                        st.session_state.outlook_graph_device_flow
-                    )
-                    st.session_state.outlook_graph_device_flow = None
-                created_count = provider.create_drafts(draft_table)
-                st.session_state.outlook_graph_created_count = created_count
-                st.success(f"{created_count} Outlook drafts created successfully")
-            except OutlookGraphAuthRequired as exc:
-                st.session_state.outlook_graph_device_flow = exc.flow
-                st.info(str(exc))
-                return
-            except Exception as exc:
-                st.error(f"Could not create Outlook drafts: {exc}")
-                return
 
-        if st.session_state.outlook_graph_device_flow:
-            flow = st.session_state.outlook_graph_device_flow
-            st.warning(
-                "Outlook authentication pending. Open "
-                f"{flow['verification_uri']} and enter code {flow['user_code']}, "
-                "then click Create Outlook Drafts again."
+        graph_configured = is_outlook_graph_configured()
+        provider = None
+        if graph_configured:
+            try:
+                provider = OutlookGraphDraftProvider()
+                if provider.has_cached_account():
+                    st.session_state.outlook_graph_connected = True
+            except Exception as exc:
+                st.session_state.outlook_graph_connected = False
+                st.error(
+                    f"Could not initialize Microsoft Graph Outlook integration: {exc}"
+                )
+
+        if graph_configured and provider:
+            status = (
+                "Connected"
+                if st.session_state.outlook_graph_connected
+                else "Not connected"
             )
+            st.write(f"**Outlook connection status:** {status}")
+
+            if st.button("Connect Outlook"):
+                try:
+                    if st.session_state.outlook_graph_device_flow:
+                        provider.complete_device_authentication(
+                            st.session_state.outlook_graph_device_flow
+                        )
+                        st.session_state.outlook_graph_device_flow = None
+                        st.session_state.outlook_graph_connected = True
+                        st.success("Outlook connected")
+                    else:
+                        provider.connect()
+                        st.session_state.outlook_graph_connected = True
+                        st.success("Outlook connected")
+                except OutlookGraphAuthRequired as exc:
+                    st.session_state.outlook_graph_device_flow = exc.flow
+                    st.session_state.outlook_graph_connected = False
+                    st.info(str(exc))
+                except Exception as exc:
+                    st.session_state.outlook_graph_connected = False
+                    st.error(f"Could not connect Outlook: {exc}")
+
+            if st.session_state.outlook_graph_device_flow:
+                flow = st.session_state.outlook_graph_device_flow
+                st.warning(
+                    "Outlook authentication pending. Open "
+                    f"{flow['verification_uri']} and enter code {flow['user_code']}, "
+                    "then click Connect Outlook."
+                )
+
+            if st.button(
+                "Create drafts in Outlook",
+                disabled=not st.session_state.outlook_graph_connected,
+            ):
+                try:
+                    draft_table = build_outlook_graph_draft_table(
+                        st.session_state.generated_emails
+                    )
+                    created_count = provider.create_drafts(draft_table)
+                    st.session_state.outlook_graph_created_count = created_count
+                    st.success(f"{created_count} Outlook drafts created")
+                except OutlookGraphAuthRequired as exc:
+                    st.session_state.outlook_graph_device_flow = exc.flow
+                    st.session_state.outlook_graph_connected = False
+                    st.info(str(exc))
+                except Exception as exc:
+                    st.error(f"Could not create Outlook drafts: {exc}")
+        else:
+            st.write("**Outlook connection status:** Microsoft Graph not configured")
+            st.info(
+                "To enable direct Outlook draft creation, register a Microsoft Entra public-client app with delegated Microsoft Graph Mail.ReadWrite permission, then set MS_GRAPH_CLIENT_ID before starting Streamlit. Until then, use Download EML ZIP as the fallback."
+            )
+
         if st.session_state.outlook_graph_created_count:
             st.success(
-                f"{st.session_state.outlook_graph_created_count} Outlook drafts created successfully"
+                f"{st.session_state.outlook_graph_created_count} Outlook drafts created"
             )
 
         if not st.session_state.outlook_draft_csv or not st.session_state.outlook_draft_zip:
@@ -1601,7 +1665,7 @@ def main() -> None:
                 mime="text/csv",
             )
             st.download_button(
-                "Download Outlook Drafts ZIP",
+                "Download EML ZIP",
                 data=st.session_state.outlook_draft_zip,
                 file_name="outlook_drafts.zip",
                 mime="application/zip",
