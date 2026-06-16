@@ -17,8 +17,9 @@ Andy Bot is a Streamlit app for generating varied persona-based Metabolon outrea
    - Safety / Quality
    - Translational / Clinical Development
 3. Before email generation, Andy Bot validates contact integrity using Company, Email Address, LinkedIn Current Company, and LinkedIn Current Title when those fields are available.
-4. It randomly selects one of ten subject lines and one of ten persona-specific use cases for contacts that pass integrity checks.
-5. It generates and exports a table with one row per contact:
+4. It generates a Contact Narrative of 20 words or fewer that summarizes what the person most likely cares about in their current role, plus a confidence score.
+5. It randomly selects one of ten subject lines and one of ten persona-specific use cases for contacts that pass integrity checks.
+6. It generates and exports a table with one row per contact:
    - Name
    - Company
    - Persona
@@ -29,10 +30,12 @@ Andy Bot is a Streamlit app for generating varied persona-based Metabolon outrea
    - Suggested Title
    - Subject
    - Email
+   - Contact Narrative
+   - Contact Narrative Confidence
    - Matched Keyword
    - Narrative Variant ID
 
-Contact integrity statuses are GREEN, YELLOW, and RED. GREEN contacts generate normally, YELLOW contacts generate with a warning in the processing summary, and RED contacts are marked `Review Required` instead of receiving generated outreach copy. Operations / Low Priority contacts are flagged for manual review instead of automatic outreach. Generated emails keep the existing upload/import workflow. Explicit persona labels such as Biomarkers / Bioanalysis, Clinical Pharmacology, Computational Biology, Operations / Low Priority, and Immunology are preserved in the export, while related legacy or specialist labels are mapped to the closest available content family for email copy. Medical Affairs is routed only by an explicit `medical affairs` match. The email body uses a fixed greeting, Helmut von Keyserling introduction, persona-specific use-case sentence, three persona-specific bullets, Metabolon dataset sentence, requested interest sentence, and Helmut's signature. EML export sets Helmut as the From header when `METABOLON_SENDER_EMAIL` is configured; otherwise each EML begins with `Open as draft and choose sender in Outlook.`
+Contact integrity statuses are GREEN, YELLOW, and RED. GREEN contacts generate normally, YELLOW contacts generate with a warning in the processing summary, and RED contacts are marked `Review Required` instead of receiving generated outreach copy. Operations / Low Priority contacts are flagged for manual review instead of automatic outreach. Generated emails keep the existing upload/import workflow. Explicit persona labels such as Biomarkers / Bioanalysis, Clinical Pharmacology, Computational Biology, Operations / Low Priority, and Immunology are preserved in the export, while related legacy or specialist labels are mapped to the closest available content family for email copy. Medical Affairs is routed only by an explicit `medical affairs` match. The email body uses a fixed greeting, the Contact Narrative opening, Helmut von Keyserling introduction, a short role-relevant Metabolon story based on the Contact Narrative plus internal persona/offering selection, a meeting-oriented CTA, and Helmut's signature. Internal persona labels, recommended offering names, and routing logic are not written into the email body. EML export sets Helmut as the From header when `METABOLON_SENDER_EMAIL` is configured; otherwise each EML begins with `Open as draft and choose sender in Outlook.`
 
 ## Setup
 

@@ -156,8 +156,8 @@ def _story_for(offering: str, problem: str, confidence: float) -> MetabolonStory
         recommended_offering=offering,
         scientific_problem=problem,
         email_story=(
-            f"Metabolon can support {problem} with {offering.lower()} so the team can "
-            "connect sample data to pathway biology and clearer program decisions."
+            f"Use {offering.lower()} for {problem}, connecting sample data "
+            "to pathway biology and clearer program decisions."
         ),
         confidence=confidence,
     )
@@ -191,7 +191,11 @@ def recommend_metabolon_story(
             0.91,
         )
 
-    if "immunology" in persona_text or "immunology" in combined_text or "immune" in combined_text:
+    if (
+        "immunology" in persona_text
+        or "immunology" in combined_text
+        or "immune" in combined_text
+    ):
         if _contains_any(combined_text, LIPID_INFLAMMATION_TERMS):
             return _story_for(
                 "Lipidomics",
@@ -218,7 +222,11 @@ def recommend_metabolon_story(
             0.86,
         )
 
-    if "oncology" in persona_text or "oncology" in combined_text or "cancer" in combined_text:
+    if (
+        "oncology" in persona_text
+        or "oncology" in combined_text
+        or "cancer" in combined_text
+    ):
         return _story_for(
             "Global Discovery Panel",
             "studying tumor metabolism, treatment response, resistance, and patient heterogeneity",

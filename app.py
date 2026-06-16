@@ -200,6 +200,8 @@ class ContactOutreach(NamedTuple):
     suggested_title: str
     subject: str
     email: str
+    contact_narrative: str
+    contact_narrative_confidence: float
     matched_keyword: str
     narrative_variant_id: str
     metabolon_capability: str
@@ -711,6 +713,167 @@ def get_narrative_personas() -> tuple[str, ...]:
     return PERSONAS
 
 
+CONTACT_NARRATIVE_PATTERNS: tuple[tuple[str, tuple[str, ...], str], ...] = (
+    (
+        "Computational Biology",
+        (
+            "computational",
+            "ai",
+            "in silico",
+            "modeling",
+            "modelling",
+            "bioinformatics",
+            "systems biology",
+        ),
+        "Connecting computational predictions with functional biological evidence.",
+    ),
+    (
+        "Clinical Pharmacology",
+        (
+            "clinical pharmacology",
+            "pk/pd",
+            "pharmacokinetic",
+            "pharmacodynamic",
+            "dose",
+            "exposure response",
+        ),
+        "Connecting dose, exposure, and biological response in human samples.",
+    ),
+    (
+        "Immunology",
+        ("immunology", "autoimmune", "inflammation", "immune"),
+        "Understanding treatment response and patient heterogeneity in immunology programs.",
+    ),
+    (
+        "Oncology",
+        ("oncology", "cancer", "tumor", "tumour", "immuno-oncology"),
+        "Understanding tumor biology, resistance, and patient heterogeneity across oncology programs.",
+    ),
+    (
+        "Safety / Quality",
+        ("safety", "quality", "pharmacovigilance", "risk", "toxicology", "toxicity"),
+        "Understanding biological context around safety and risk-related observations.",
+    ),
+    (
+        "Biomarkers / Bioanalysis",
+        (
+            "biomarker",
+            "bioanalysis",
+            "bioanalytical",
+            "assay",
+            "patient stratification",
+        ),
+        "Finding biologically meaningful markers that explain response, stratification, and disease activity.",
+    ),
+    (
+        "Translational / Clinical Development",
+        ("translational", "clinical development", "clinical trial", "clinical study"),
+        "Translational decision making and understanding biology that supports development choices.",
+    ),
+    (
+        "Discovery",
+        ("discovery", "target", "screening", "biology", "multiomics", "multi-omics"),
+        "Understanding functional biology that helps prioritize targets, models, and compounds.",
+    ),
+)
+
+PERSONA_DEFAULT_NARRATIVES = {
+    "Computational Biology": "Connecting computational predictions with functional biological evidence.",
+    "Clinical Pharmacology": "Connecting dose, exposure, and biological response in human samples.",
+    "Immunology": "Understanding treatment response and patient heterogeneity in immunology programs.",
+    "Oncology": "Understanding tumor biology, resistance, and patient heterogeneity across oncology programs.",
+    "Safety / Quality": "Understanding biological context around safety and risk-related observations.",
+    "Biomarkers / Bioanalysis": "Finding biologically meaningful markers that explain response, stratification, and disease activity.",
+    "Translational / Clinical Development": "Translational decision making and understanding biology that supports development choices.",
+    "Discovery": "Understanding functional biology that helps prioritize targets, models, and compounds.",
+}
+
+
+def contact_narrative_confidence(
+    narrative: str,
+    persona_confidence_score: float,
+    matched_keyword: str,
+    text_matched: bool,
+) -> float:
+    """Score confidence that the contact narrative reflects the contact role."""
+    score = persona_confidence_score
+    if matched_keyword:
+        score += 0.04
+    if text_matched:
+        score += 0.04
+    return round(min(score, 0.98), 2)
+
+
+def generate_contact_narrative(
+    persona: str,
+    title: str,
+    therapeutic_area: str,
+    matched_keyword: str,
+    persona_confidence_score: float,
+) -> tuple[str, float]:
+    """Infer what this person most likely cares about in their current role."""
+    active_persona = map_persona(persona)
+    combined_text = " ".join(
+        part
+        for part in (active_persona, title, therapeutic_area, matched_keyword)
+        if part
+    ).lower()
+    for pattern_persona, signals, narrative in CONTACT_NARRATIVE_PATTERNS:
+        if active_persona == pattern_persona or any(
+            pattern_matches(combined_text, signal) for signal in signals
+        ):
+            return narrative, contact_narrative_confidence(
+                narrative, persona_confidence_score, matched_keyword, True
+            )
+    narrative = PERSONA_DEFAULT_NARRATIVES.get(
+        active_persona,
+        "Understanding pathway biology that can inform program decisions.",
+    )
+    return narrative, contact_narrative_confidence(
+        narrative, persona_confidence_score, matched_keyword, False
+    )
+
+
+def build_contact_story(
+    contact_narrative: str,
+    persona: str,
+    story: MetabolonStory,
+    use_case: str,
+    benefits: tuple[str, ...],
+) -> str:
+    """Create human-facing story copy without exposing internal routing labels."""
+    persona_text = persona.lower()
+    if story.recommended_offering == "Bioinformatics / Multiomics Software":
+        return (
+            "Metabolomics can add a functional readout to computational and multi-omics work, "
+            "helping connect predicted pathways with measured biochemical changes in real samples."
+        )
+    if story.recommended_offering == "Lipidomics":
+        return (
+            "Focused lipid biology can help show whether inflammatory or immune-metabolic signals "
+            "are changing in ways that explain response, subgroup differences, or disease activity."
+        )
+    if "safety" in persona_text or "quality" in persona_text:
+        return (
+            "Broad metabolomics can help investigate unexpected findings by showing which pathways "
+            "shift across treatment, control, product, or process-related sample groups."
+        )
+    if "clinical pharmacology" in persona_text:
+        return (
+            "Metabolite measurements can give pharmacology teams an early biological readout alongside "
+            "dose, exposure, time point, and cohort comparisons."
+        )
+    if "oncology" in persona_text:
+        return (
+            "Metabolomics can help compare tumor, host, and treatment biology across cohorts, including "
+            "signals linked to response, resistance, or patient subgroups."
+        )
+    return (
+        f"Metabolomics can help teams {use_case}, while adding quantitative pathway context around "
+        f"{benefits[0]}."
+    )
+
+
 LINKEDIN_HOOK_PATTERNS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     (
         "Therapeutic area",
@@ -725,7 +888,7 @@ LINKEDIN_HOOK_PATTERNS: tuple[tuple[str, tuple[str, ...], str], ...] = (
             "cardiometabolic",
             "metabolic disease",
         ),
-        "I noticed your LinkedIn profile highlights work in {signal}; that focus is closely aligned with where metabolomics can add biologically grounded context.",
+        "Your work in {signal} is closely aligned with where metabolomics can add biologically grounded context.",
     ),
     (
         "Biomarker signal",
@@ -738,7 +901,7 @@ LINKEDIN_HOOK_PATTERNS: tuple[tuple[str, tuple[str, ...], str], ...] = (
             "pharmacodynamic",
             "pk/pd",
         ),
-        "I noticed your LinkedIn profile emphasizes {signal}, so I wanted to tailor this note around metabolomics as a practical way to strengthen translational evidence.",
+        "Your work around {signal} points to metabolomics as a practical way to strengthen translational evidence.",
     ),
     (
         "Discovery signal",
@@ -751,7 +914,7 @@ LINKEDIN_HOOK_PATTERNS: tuple[tuple[str, tuple[str, ...], str], ...] = (
             "computational biology",
             "bioinformatics",
         ),
-        "I noticed your LinkedIn profile points to {signal}; that stood out because metabolomics can add a functional readout to discovery and multi-omics programs.",
+        "Your work around {signal} connects well with metabolomics as a functional readout for discovery and multi-omics programs.",
     ),
     (
         "Leadership signal",
@@ -764,7 +927,7 @@ LINKEDIN_HOOK_PATTERNS: tuple[tuple[str, tuple[str, ...], str], ...] = (
             "executive director",
             "vice president",
         ),
-        "I noticed your LinkedIn profile highlights {signal}, so I thought a concise, outcome-focused note on where Metabolon can support teams would be most useful.",
+        "Your work around {signal} suggests a concise, outcome-focused note on metabolomics may be useful.",
     ),
 )
 
@@ -816,6 +979,8 @@ def build_email(
             integrity.suggested_title,
             "Review Required",
             "Review Required",
+            "",
+            0.0,
             matched_keyword,
             "REVIEW-REQUIRED",
             "",
@@ -842,6 +1007,8 @@ def build_email(
             integrity.suggested_title,
             "Review manually",
             "Review manually",
+            "",
+            0.0,
             matched_keyword,
             "MANUAL-REVIEW",
             "",
@@ -867,31 +1034,33 @@ def build_email(
     random.shuffle(use_case_options)
     random.shuffle(subject_options)
 
-    persona_label = narrative_persona.lower()
-    benefits = "\n".join(f"• {benefit}" for benefit in variant_set["benefits"])
+    contact_narrative, contact_narrative_score = generate_contact_narrative(
+        active_persona,
+        title,
+        therapeutic_area,
+        matched_keyword,
+        persona_confidence_score,
+    )
+    benefits = variant_set["benefits"]
 
     for use_case_index, use_case in use_case_options:
         for subject_index, subject_template in subject_options:
             subject = subject_template.format(company=company_text)
+            contact_story = build_contact_story(
+                contact_narrative, active_persona, metabolon_story, use_case, benefits
+            )
+            email_narrative = contact_narrative.rstrip(".")
             email = (
                 f"Dear {first_name},\n\n"
+                f"Given your focus on {email_narrative}, I thought this might be relevant.\n\n"
                 "My name is Helmut von Keyserling, and I support "
                 f"{company_text} as Strategic Account Manager at Metabolon.\n\n"
-                f"Many {persona_label} teams are using metabolomics to {use_case}.\n\n"
-                f"For this contact, the best Metabolon angle is {metabolon_story.recommended_offering}: "
-                f"{metabolon_story.scientific_problem}.\n\n"
-                f"This type of data can help:\n{benefits}\n\n"
-                f"{metabolon_story.email_story}\n\n"
-                "If this is of interest, I would be happy to briefly introduce our approach "
-                "and learn how your team is thinking about this area.\n\n"
+                f"{contact_story}\n\n"
+                "Would you be open to a short meeting to compare notes on where this could fit?\n\n"
                 "Best regards,\n\n"
                 "Helmut von Keyserling\n"
                 "Strategic Account Manager"
             )
-            if linkedin_hook_used == "Yes" and linkedin_hook:
-                email = email.replace(
-                    "\n\nMy name is", f"\n\n{linkedin_hook}\n\nMy name is", 1
-                )
             if email not in used_emails:
                 used_emails.add(email)
                 variant_id = (
@@ -909,6 +1078,8 @@ def build_email(
                     integrity.suggested_title,
                     subject,
                     email,
+                    contact_narrative,
+                    contact_narrative_score,
                     matched_keyword,
                     variant_id,
                     metabolon_story.primary_capability,
@@ -961,6 +1132,8 @@ def empty_output_table() -> pd.DataFrame:
             "Suggested Title",
             "Subject",
             "Email",
+            "Contact Narrative",
+            "Contact Narrative Confidence",
             "Matched Keyword",
             "Narrative Variant ID",
             "Metabolon Capability",
@@ -1096,6 +1269,8 @@ def generate_outreach_table(
             "Suggested Title",
             "Subject",
             "Email",
+            "Contact Narrative",
+            "Contact Narrative Confidence",
             "Matched Keyword",
             "Narrative Variant ID",
             "Metabolon Capability",
