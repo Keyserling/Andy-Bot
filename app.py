@@ -812,33 +812,44 @@ def generate_contact_narrative(
     return narrative, confidence
 
 
-def build_scientific_story(story: MetabolonStory) -> str:
-    """Build a V5 industry-shift paragraph around uneven adoption and insight gaps."""
-    offering = (story.recommended_offering or "Global Discovery Panel").strip()
+def build_scientific_story(story: MetabolonStory, persona: str) -> str:
+    """Return the deterministic persona-specific scientific problem block."""
+    persona_text = (map_persona(persona) or "").lower()
+
+    if "biomarker" in persona_text or "bioanalysis" in persona_text:
+        return (
+            "One thing we see repeatedly is that biomarker programs generate large amounts of molecular data, "
+            "but translating those measurements into clinically actionable stratification strategies is often far more difficult than expected. "
+            "The challenge is often not generating another biomarker candidate, but understanding which signals are biologically meaningful and likely to hold up across studies and patient populations."
+        )
+    if "clinical pharmacology" in persona_text:
+        return (
+            "One thing we see repeatedly is that exposure-response relationships are often easier to quantify than they are to explain biologically. "
+            "Many programs can measure PK and PD endpoints, yet understanding why patients respond differently remains challenging, particularly when clinical observations are not fully explained by traditional biomarkers."
+        )
+    if "oncology" in persona_text:
+        return (
+            "One thing we see repeatedly is that tumor response and resistance are increasingly understood as biological processes rather than purely clinical outcomes. "
+            "The challenge is often identifying those signals early enough to influence development decisions and patient-selection strategies."
+        )
+    if "immunology" in persona_text:
+        return (
+            "One thing we see repeatedly is that patients with similar clinical presentations can exhibit very different underlying biology. "
+            "Understanding those differences often becomes critical when trying to explain treatment response, resistance, or variability across cohorts."
+        )
+    if "translational" in persona_text or "clinical development" in persona_text:
+        return (
+            "One thing we see repeatedly is that promising biological findings do not always translate cleanly between models and human studies. "
+            "Understanding where those disconnects occur can be critical for development decisions."
+        )
+
     problem = (
         story.scientific_problem
         or "extracting biological insight from available samples"
     )
-
-    if offering == "Biopharma Services":
-        workflow_context = "biomarker, translational, and PK/PD workflows"
-    elif offering == "Lipidomics":
-        workflow_context = (
-            "biomarker, translational, and patient-stratification workflows"
-        )
-    elif offering == "Multiomics":
-        workflow_context = "mechanism, biomarker, and translational workflows"
-    else:
-        workflow_context = (
-            "biomarker, mechanism, translational, and patient-stratification workflows"
-        )
-
     return (
-        "What has surprised me is not the growing interest in metabolomics and multiomics, "
-        "but how differently organizations approach them. "
-        f"Some teams are now using these data routinely in {workflow_context}, while others still rely on a narrower set of molecular readouts. "
-        "Many teams already have samples that could answer important biological questions. "
-        f"The bottleneck is often understanding what those samples are already trying to say, especially around {problem}, before the next program decision."
+        "One thing we see repeatedly is that generating molecular data is usually easier than deciding which biological signals should influence a program. "
+        f"The challenge is often connecting those signals to decision-relevant questions around {problem}."
     )
 
 
@@ -1480,7 +1491,7 @@ def build_email(
     signal_audit = linkedin_signal_audit_columns(
         linkedin_observation_text, selected_linkedin_signal, hook_type
     )
-    scientific_story = build_scientific_story(metabolon_story)
+    scientific_story = build_scientific_story(metabolon_story, active_persona)
     differentiation_statement = build_metabolon_differentiation(
         metabolon_story, active_persona
     )
