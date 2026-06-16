@@ -752,32 +752,35 @@ def generate_contact_narrative(
 
 
 def build_scientific_story(story: MetabolonStory) -> str:
-    """Build one Problem -> Why it matters -> How metabolomics helps story from Metabolon knowledge."""
+    """Build a challenger narrative around industry adoption and biological insight gaps."""
     offering = (story.recommended_offering or "Global Discovery Panel").strip()
-    problem = story.scientific_problem or "understanding biological mechanisms from available samples"
+    problem = story.scientific_problem or "extracting biological insight from available samples"
 
     if offering == "Biopharma Services":
         return (
-            f"A common problem is {problem}. "
-            "That matters because clinical endpoints, PK, and biomarker data can show outcomes without explaining the biology behind them. "
-            "Metabolomics helps by adding a functional readout of patient sample biology that connects observations with pathway activity, mechanism understanding, and translational development decisions."
+            "Across US pharma, I am increasingly seeing metabolomics and multiomics move "
+            "from specialist projects into routine translational, biomarker, and PK/PD decision making. "
+            f"What has surprised me is not the interest in these data, but how differently teams approach {problem}. "
+            "Many groups already have samples that could answer important biological questions; the bottleneck is often turning those samples into interpretable biology before the next program decision."
         )
     if offering == "Lipidomics":
         return (
-            f"A common problem is {problem}. "
-            "That matters because lipid signaling, inflammatory biology, and metabolic state can differ across patient groups even when standard endpoints look similar. "
-            "Metabolomics helps by measuring lipid and small-molecule activity in available biospecimens, supporting interpretation of heterogeneity, treatment-related shifts, and markers of variable benefit."
+            "Across US pharma, I am increasingly seeing metabolomics and multiomics move "
+            "from specialist projects into routine biomarker, translational, and patient-stratification workstreams. "
+            f"What has surprised me is how often {problem} becomes a decision gap rather than a data-generation gap. "
+            "Many groups already have the right cohorts or stored biospecimens; the question is whether they are extracting enough biological signal from them."
         )
     if offering == "Multiomics":
         return (
-            f"A common problem is {problem}. "
-            "That matters because transcriptomic, proteomic, genomic, and metabolomic data are harder to interpret when each layer is reviewed separately. "
-            "Metabolomics helps by providing a functional biochemical layer, and multiomics analysis connects those measurements with upstream molecular signals and clinical observations."
+            "Across US pharma, I am increasingly seeing multiomics become part of routine mechanism, biomarker, and translational decision making. "
+            f"What has surprised me is not the volume of data being generated, but how unevenly organizations approach {problem}. "
+            "The advantage increasingly goes to teams that can connect existing sample sets across molecular layers and convert them into clear biological interpretation."
         )
     return (
-        f"A common problem is {problem}. "
-        "That matters because models, cohorts, or time points can look similar by standard readouts while behaving differently in practice. "
-        "Metabolomics helps through broad biochemical profiling that connects available samples with pathway activity, mechanism understanding, target engagement, treatment effects, resistance, or patient heterogeneity."
+        "Across US pharma, I am increasingly seeing metabolomics and multiomics move "
+        "from exploratory science into standard biomarker, mechanism, translational, and patient-stratification workstreams. "
+        f"What has surprised me is how often the hard part is {problem}, not generating another dataset. "
+        "Many groups already have samples that could answer important biological questions; the challenge is whether those samples are being used aggressively enough to inform development decisions."
     )
 
 
@@ -934,7 +937,7 @@ def build_email(
     linkedin_hook_type: str = "",
     linkedin_hook_used: str = "No",
 ) -> ContactOutreach:
-    """Build deterministic Outreach Wording Engine V2 email copy."""
+    """Build deterministic Challenger Outreach Engine V4 email copy."""
     integrity = integrity or ContactIntegrity(
         "YELLOW", "Company cannot be confirmed.", company, ""
     )
@@ -1021,15 +1024,15 @@ def build_email(
         linkedin_content_preview, company_text
     )
     scientific_story = build_scientific_story(metabolon_story)
-    subject = f"Metabolomics and {contact_narrative.rstrip('.').lower()}"
+    subject = f"A question on {contact_narrative.rstrip('.').lower()}"
     email = (
         f"Dear {first_name},\n\n"
         f"{observation}\n\n"
-        "My name is Helmut von Keyserling, and I support "
-        f"{company_text} as Strategic Account Manager at Metabolon.\n\n"
+        "I work with pharmaceutical R&D organizations at Metabolon, where we sit close to "
+        "how large development teams are standardizing metabolomics and multiomics across programs.\n\n"
         f"{scientific_story}\n\n"
-        "Would you be open to a short meeting to compare notes on whether this could be relevant "
-        "to any current or upcoming programs?\n\n"
+        f"I would be interested in how {company_text} currently thinks about this area, particularly given how quickly adoption appears to be increasing across the industry. "
+        "Would it be worth comparing notes?\n\n"
         "Best regards,\n\n"
         "Helmut von Keyserling\n"
         "+49 176 61356899"
@@ -1051,7 +1054,7 @@ def build_email(
         contact_narrative,
         contact_narrative_score,
         matched_keyword,
-        "ENGINE-V2",
+        "ENGINE-V4",
         metabolon_story.primary_capability,
         metabolon_story.recommended_offering,
         metabolon_story.scientific_problem,

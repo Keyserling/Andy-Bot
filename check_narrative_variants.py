@@ -1,4 +1,4 @@
-"""Local checks for Outreach Wording Engine V2."""
+"""Local checks for Challenger Outreach Engine V4."""
 
 from __future__ import annotations
 
@@ -27,19 +27,29 @@ FORBIDDEN_EMAIL_TEXT = (
     "For your team, that may be useful",
     "Recommended offering",
     "Persona name",
+    "Metabolomics helps",
+    "We offer",
+    "Our platform can",
+    "My name is Helmut",
 )
 
 
 def main() -> None:
     sample = build_email("Taylor Example", "ExampleCo", "Discovery")
-    if sample.narrative_variant_id != "ENGINE-V2":
-        raise AssertionError("Engine V2 must use one deterministic variant id")
+    if sample.narrative_variant_id != "ENGINE-V4":
+        raise AssertionError("Engine V4 must use one deterministic variant id")
     if sample.email != build_email("Taylor Example", "ExampleCo", "Discovery").email:
         raise AssertionError("Identical inputs must generate identical email text")
     if "+49 176 61356899" not in sample.email:
         raise AssertionError("Signature must include Helmut's phone number")
     if "Given your role at ExampleCo, I thought this might be relevant." not in sample.email:
         raise AssertionError("Missing required no-LinkedIn fallback observation")
+    if "Are we doing enough" in sample.email:
+        raise AssertionError("Email should create FOMO without using the goal phrase literally")
+    if "standard biomarker, mechanism, translational, and patient-stratification workstreams" not in sample.email:
+        raise AssertionError("Challenger narrative must frame industry adoption")
+    if "Would it be worth comparing notes?" not in sample.email:
+        raise AssertionError("CTA should invite discussion rather than sell services")
     for phrase in FORBIDDEN_EMAIL_TEXT:
         if phrase in sample.email:
             raise AssertionError(f"Forbidden phrase found: {phrase!r}")
@@ -134,7 +144,7 @@ def main() -> None:
     if graph_drafts.to_dict("records") != [{"To": "ok@example.com", "Subject": "Subject", "Body": sample.email}]:
         raise AssertionError("Microsoft Graph draft creation must skip RED contacts")
 
-    print("Outreach Wording Engine V2 checks passed.")
+    print("Challenger Outreach Engine V4 checks passed.")
 
 
 if __name__ == "__main__":
