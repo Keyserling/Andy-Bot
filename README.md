@@ -35,7 +35,7 @@ Andy Bot is a Streamlit app for generating varied persona-based Metabolon outrea
    - Matched Keyword
    - Narrative Variant ID
 
-Contact integrity statuses are GREEN, YELLOW, and RED. GREEN contacts generate normally, YELLOW contacts generate with a warning in the processing summary, and RED contacts are marked `Review Required` instead of receiving generated outreach copy. Operations / Low Priority contacts are flagged for manual review instead of automatic outreach. Generated emails keep the existing upload/import workflow. Explicit persona labels such as Biomarkers / Bioanalysis, Clinical Pharmacology, Computational Biology, Operations / Low Priority, and Immunology are preserved in the export, while related legacy or specialist labels are mapped to the closest available content family for email copy. Medical Affairs is routed only by an explicit `medical affairs` match. The email body uses a fixed greeting, the Contact Narrative opening, Helmut von Keyserling introduction, a short role-relevant Metabolon story based on the Contact Narrative plus internal persona/offering selection, a meeting-oriented CTA, and Helmut's signature. Internal persona labels, recommended offering names, and routing logic are not written into the email body. EML export sets Helmut as the From header when `METABOLON_SENDER_EMAIL` is configured; otherwise each EML begins with `Open as draft and choose sender in Outlook.`
+Contact integrity statuses are GREEN, YELLOW, and RED. GREEN contacts generate normally, YELLOW contacts generate with a warning in the processing summary, and RED contacts are marked `Review Required` instead of receiving generated outreach copy. Operations / Low Priority contacts are flagged for manual review instead of automatic outreach. Generated emails keep the existing upload/import workflow. Explicit persona labels such as Biomarkers / Bioanalysis, Clinical Pharmacology, Computational Biology, Operations / Low Priority, and Immunology are preserved in the export, while related legacy or specialist labels are mapped to the closest available content family for email copy. Medical Affairs is routed only by an explicit `medical affairs` match. The email body uses a fixed greeting, the Contact Narrative opening, Helmut von Keyserling introduction, a short role-relevant Metabolon story based on the Contact Narrative plus internal persona/offering selection, a meeting-oriented CTA, and Helmut's signature. Internal persona labels, recommended offering names, and routing logic are not written into the email body. The **Create Outlook Drafts** button creates unsent Outlook drafts directly through Microsoft Graph using the generated To, Subject, and Body fields. CSV and EML ZIP downloads remain available as a fallback. EML export sets Helmut as the From header when `METABOLON_SENDER_EMAIL` is configured; otherwise each EML begins with `Open as draft and choose sender in Outlook.`
 
 ## Setup
 
@@ -46,6 +46,14 @@ pip install -r requirements.txt
 ```
 
 No OpenAI API key is required because generated emails come from the local narrative library.
+
+To create drafts directly in Outlook, register or use a Microsoft Entra public-client application with delegated Microsoft Graph `Mail.ReadWrite` permission and set its client ID before starting Streamlit:
+
+```bash
+export MS_GRAPH_CLIENT_ID=your-public-client-application-id
+```
+
+The first Outlook draft creation starts Microsoft device-code authentication. Andy Bot stores the Microsoft Graph token cache in the operating-system keyring when available, with a user-only `~/.andy_bot/ms_graph_token_cache.json` fallback for environments without a keyring backend. Draft creation calls Microsoft Graph `/me/messages`, which saves messages to Drafts and does not send them.
 
 ## Run the app
 
