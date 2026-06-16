@@ -768,7 +768,7 @@ CONTACT_NARRATIVE_PATTERNS: tuple[tuple[str, tuple[str, ...], str], ...] = (
     (
         "Translational / Clinical Development",
         ("translational", "clinical development", "clinical trial", "clinical study"),
-        "Translational decision making and understanding biology that supports development choices.",
+        "Interpreting patient sample evidence to guide clinical development programs.",
     ),
     (
         "Discovery",
@@ -784,7 +784,7 @@ PERSONA_DEFAULT_NARRATIVES = {
     "Oncology": "Understanding tumor biology, resistance, and patient heterogeneity across oncology programs.",
     "Safety / Quality": "Understanding biological context around safety and risk-related observations.",
     "Biomarkers / Bioanalysis": "Finding biologically meaningful markers that explain response, stratification, and disease activity.",
-    "Translational / Clinical Development": "Translational decision making and understanding biology that supports development choices.",
+    "Translational / Clinical Development": "Interpreting patient sample evidence to guide clinical development programs.",
     "Discovery": "Understanding functional biology that helps prioritize targets, models, and compounds.",
 }
 
@@ -827,7 +827,7 @@ def generate_contact_narrative(
             )
     narrative = PERSONA_DEFAULT_NARRATIVES.get(
         active_persona,
-        "Understanding pathway biology that can inform program decisions.",
+        "Understanding biological mechanisms that can inform program decisions.",
     )
     return narrative, contact_narrative_confidence(
         narrative, persona_confidence_score, matched_keyword, False
@@ -841,79 +841,62 @@ def build_contact_story(
     use_case: str,
     benefits: tuple[str, ...],
 ) -> str:
-    """Create a concise scientific narrative from the Metabolon knowledge layer."""
-    problem = (story.scientific_problem or "understanding pathway biology").strip()
-    problem_topic = problem
-    problem_action = problem
-    for gerund, infinitive in (
-        ("connecting ", "connect "),
-        ("generating ", "generate "),
-        ("integrating ", "integrate "),
-        ("discovering ", "discover "),
-        ("interpreting ", "interpret "),
-        ("profiling ", "profile "),
-        ("studying ", "study "),
-        ("using ", "use "),
-    ):
-        if problem.lower().startswith(gerund):
-            problem_action = f"how to {infinitive}{problem[len(gerund):]}"
-            if gerund == "generating " and " for " in problem:
-                problem_topic = problem.split(" for ", 1)[1]
-                problem_action = problem_topic
-            break
-    if problem.lower().startswith("understanding "):
-        problem_topic = problem[len("understanding ") :]
-        problem_action = f"how to understand {problem_topic}"
-    capability = (
-        story.primary_capability or "metabolomics adds functional biological context"
-    ).strip()
+    """Create a concise, human scientific narrative from the Metabolon knowledge layer."""
     offering = (story.recommended_offering or "Global Discovery Panel").strip()
-    focus = (contact_narrative or "program decisions").strip().rstrip(".").lower()
 
     if offering == "Biopharma Services":
         return (
-            f"Many clinical and translational teams are working through {problem_action}. "
-            f"That matters because {focus} often depends on explaining why patients respond differently "
-            "despite similar clinical characteristics. "
-            "Metabolomics provides a functional view of biology and can connect treatment response "
-            "with disease mechanisms using samples already collected in studies."
+            "Many teams are trying to understand why patients with apparently similar "
+            "clinical characteristics respond differently to treatment. Those differences "
+            "can be hard to interpret when endpoint, PK, or biomarker data show the outcome "
+            "but not the underlying metabolic changes. Metabolomics provides a functional "
+            "readout of biological activity and can help connect clinical observations with "
+            "mechanisms using samples already collected in studies. These data can clarify "
+            "baseline patient differences, on-treatment effects, and signals associated with "
+            "response or resistance without requiring teams to start from a new study design."
         )
 
     if offering == "Lipidomics":
         return (
-            f"The biology around {problem_topic} remains difficult to interpret when "
-            "clinical endpoints do not reveal the "
-            "pathways driving disease activity. "
-            f"For teams focused on {focus}, those signals can shape how response, progression, "
-            "and patient subgroups are interpreted. "
-            "Focused lipid profiling adds value by measuring lipid signaling and immune-metabolic "
-            "pathways linked to treatment biology."
+            "One challenge in inflammatory and cardiometabolic programs is determining "
+            "whether clinical effects reflect meaningful differences in lipid signaling, "
+            "immune activity, or metabolic state between patient groups. Standard endpoints "
+            "often show that a change occurred, but not which processes may be contributing. "
+            "Metabolomics can add a functional view of lipid and small-molecule activity in "
+            "available biospecimens. That can help teams distinguish baseline heterogeneity, "
+            "treatment-related shifts, and markers that may explain progression or variable "
+            "benefit across cohorts."
         )
 
     if offering == "Bioinformatics / Multiomics Software":
         return (
-            f"Many groups are trying to work through {problem_action} as a coherent "
-            "biological interpretation. "
-            f"This matters for {focus} because transcriptomic, proteomic, and metabolomic signals "
-            "can point in different directions without pathway context. "
-            "Multiomics analysis adds value by connecting molecular observations with pathway "
-            "activity and functional biological outcomes."
+            "Programs often generate large amounts of molecular and clinical data, yet the "
+            "drivers of observed outcomes remain unclear. Transcriptomic, proteomic, and "
+            "metabolomic results can each be informative, but they are difficult to interpret "
+            "when each layer is reviewed separately. Metabolomics provides a functional "
+            "measure of biochemical activity, and integrated analysis can connect those "
+            "measurements with upstream molecular signals and clinical observations. That can "
+            "help teams prioritize findings that are consistent across data types and decide "
+            "which hypotheses merit follow-up."
         )
 
     if offering == "Global Discovery Panel":
         return (
-            "Many programs generate molecular and clinical data, yet still need clearer "
-            f"evidence about {problem_action}. "
-            f"That matters because {focus} depends on understanding the biology behind observed "
-            "outcomes, not just measuring associations. "
-            "Broad metabolomics adds pathway-level insight into target biology, treatment response, "
-            "and patient heterogeneity from existing samples."
+            "Programs often generate large amounts of molecular and clinical data, yet the "
+            "biological drivers of observed outcomes remain unclear. This is especially true "
+            "when models, cohorts, or time points look similar by standard readouts but behave "
+            "differently in practice. Metabolomics provides a functional readout of biological "
+            "activity and can help connect those observations with underlying mechanisms using "
+            "existing samples. These data can reveal metabolic differences associated with "
+            "target engagement, treatment effects, resistance, or patient heterogeneity, giving "
+            "teams a more grounded basis for deciding what to investigate next."
         )
 
     return (
-        f"Many teams are trying to resolve {problem}. "
-        f"That matters because {focus} depends on connecting observed outcomes with underlying biology. "
-        f"{capability} Metabolomics adds value by providing functional pathway evidence from biological samples."
+        "Many teams have clinical or experimental observations that are important but "
+        "difficult to explain from standard readouts alone. Metabolomics can add a functional "
+        "view of biological activity in available samples, helping connect observed outcomes "
+        "with mechanisms that may be worth further study."
     )
 
 
@@ -1092,14 +1075,15 @@ def build_email(
             contact_story = build_contact_story(
                 contact_narrative, active_persona, metabolon_story, use_case, benefits
             )
-            email_narrative = contact_narrative.rstrip(".")
             email = (
                 f"Dear {first_name},\n\n"
-                f"Given your focus on {email_narrative}, I thought this might be relevant.\n\n"
+                f"I’m reaching out because your role at {company_text} appears close to questions "
+                "where careful interpretation of patient and study samples can make a real difference.\n\n"
                 "My name is Helmut von Keyserling, and I support "
                 f"{company_text} as Strategic Account Manager at Metabolon.\n\n"
                 f"{contact_story}\n\n"
-                "Would you be open to a short meeting to compare notes on where this could fit?\n\n"
+                "Would you be open to a short meeting to compare notes on whether this could be "
+                "useful for any current or upcoming programs?\n\n"
                 "Best regards,\n\n"
                 "Helmut von Keyserling\n"
                 "Strategic Account Manager"

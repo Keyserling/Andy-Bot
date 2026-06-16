@@ -32,6 +32,13 @@ FORBIDDEN_EMAIL_TEXT = (
     "Recommended offering",
     "Persona name",
     "Metabolon can support",
+    "disease biology",
+    "response biology",
+    "translational confidence",
+    "pathway biology",
+    "translational decision making",
+    "development choices",
+    "understanding biology",
 )
 
 
@@ -233,10 +240,10 @@ def main() -> None:
 
     sample_email = build_email("Taylor Example", "ExampleCo", "Discovery").email
     required_lines = (
-        "Given your focus on Understanding functional biology that helps prioritize targets, models, and compounds, I thought this might be relevant.",
+        "I’m reaching out because your role at ExampleCo appears close to questions where careful interpretation of patient and study samples can make a real difference.",
         "My name is Helmut von Keyserling, and I support ExampleCo as Strategic Account Manager at Metabolon.",
-        "Metabolomics can help teams ",
-        "Would you be open to a short meeting to compare notes on where this could fit?",
+        "Metabolomics provides a functional readout of biological activity",
+        "Would you be open to a short meeting to compare notes on whether this could be useful for any current or upcoming programs?",
     )
     for required_line in required_lines:
         if required_line not in sample_email:
@@ -248,8 +255,8 @@ def main() -> None:
         )
 
     word_count = len(sample_email.split())
-    if not 80 <= word_count <= 140:
-        raise AssertionError(f"Email must be 80-140 words, got {word_count}")
+    if not 140 <= word_count <= 180:
+        raise AssertionError(f"Email must be 140-180 words, got {word_count}")
 
     narrative_email = build_email(
         "Frank Oellien",

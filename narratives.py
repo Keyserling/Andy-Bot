@@ -32,7 +32,7 @@ NARRATIVE_LIBRARY = {
             "evaluate target engagement in cells, tissue, or plasma",
             "prioritize compounds after phenotypic screening",
             "study how perturbations affect metabolism",
-            "select models that better represent disease biology",
+            "select models that better represent human biology",
             "check whether tool compounds produce expected effects",
             "connect genetic findings to metabolite-level evidence",
             "support hit-to-lead decisions with sample data",
@@ -141,7 +141,7 @@ NARRATIVE_LIBRARY = {
     "Medical Affairs": {
         "subjects": (
             "Metabolomics evidence for medical affairs at {company}",
-            "Metabolomics for disease biology at {company}",
+            "Metabolomics for clinical evidence at {company}",
             "Metabolomics for evidence generation at {company}",
             "Metabolomics for scientific exchange at {company}",
             "Metabolomics for investigator studies at {company}",
@@ -152,7 +152,7 @@ NARRATIVE_LIBRARY = {
             "Metabolomics for medical evidence plans at {company}",
         ),
         "use_cases": (
-            "generate evidence for disease biology discussions",
+            "generate evidence for clinical biology discussions",
             "support investigator-sponsored research",
             "compare patient cohorts for publication planning",
             "study treatment response in clinical samples",
@@ -215,7 +215,7 @@ NARRATIVE_LIBRARY = {
             "Metabolomics for translational immunology at {company}",
         ),
         "use_cases": (
-            "study inflammatory pathway biology in patient samples",
+            "study inflammatory mechanisms in patient samples",
             "compare immune-metabolic signals across cohorts",
             "evaluate lipid-mediated inflammation and treatment response",
             "identify baseline biology linked to response",

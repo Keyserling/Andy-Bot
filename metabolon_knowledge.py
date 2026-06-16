@@ -18,7 +18,7 @@ class MetabolonStory(NamedTuple):
 OFFERING_FAMILIES = {
     "Biopharma Services": {
         "positioning": (
-            "Metabolon supports biopharma teams in understanding disease biology, "
+            "Metabolon supports biopharma teams in interpreting patient sample biology, "
             "drug mechanisms, target biology, biomarker discovery, drug efficacy, "
             "and translational development decisions."
         ),
@@ -28,7 +28,7 @@ OFFERING_FAMILIES = {
             "target biology",
             "drug efficacy",
             "pharmacodynamic biology",
-            "translational confidence",
+            "evidence for clinical development decisions",
             "patient stratification",
             "responder / non-responder biology",
             "clinical sample interpretation",
@@ -44,8 +44,8 @@ OFFERING_FAMILIES = {
     },
     "Global Discovery Panel": {
         "positioning": (
-            "Broad untargeted metabolomics for hypothesis generation, pathway-level "
-            "biology, biomarker discovery, mechanism understanding, and "
+            "Broad untargeted metabolomics for hypothesis generation, broad biochemical "
+            "measurement, biomarker discovery, mechanism understanding, and "
             "discovery/translational research."
         ),
         "use_cases": (
@@ -75,7 +75,7 @@ OFFERING_FAMILIES = {
         ),
         "use_cases": (
             "lipid signaling",
-            "inflammatory pathway biology",
+            "inflammatory mechanisms",
             "cardiometabolic risk",
             "obesity biology",
             "MASH/NASH biology",
@@ -96,7 +96,7 @@ OFFERING_FAMILIES = {
         "positioning": (
             "Software and analysis workflows that help integrate metabolomics with "
             "transcriptomics, proteomics, genomics, and other omics data to interpret "
-            "pathway biology and systems-level mechanisms."
+            "biochemical activity and systems-level mechanisms."
         ),
         "use_cases": (
             "multiomics integration",
@@ -157,7 +157,7 @@ def _story_for(offering: str, problem: str, confidence: float) -> MetabolonStory
         scientific_problem=problem,
         email_story=(
             f"Use {offering.lower()} for {problem}, connecting sample data "
-            "to pathway biology and clearer program decisions."
+            "to biological mechanisms and clearer program decisions."
         ),
         confidence=confidence,
     )
@@ -199,12 +199,12 @@ def recommend_metabolon_story(
         if _contains_any(combined_text, LIPID_INFLAMMATION_TERMS):
             return _story_for(
                 "Lipidomics",
-                "understanding inflammatory, immune-metabolic, or lipid-mediated disease biology",
+                "understanding inflammatory, immune-metabolic, or lipid-mediated mechanisms",
                 0.88,
             )
         return _story_for(
             "Global Discovery Panel",
-            "profiling immune pathway biology, patient heterogeneity, and treatment response",
+            "profiling immune activity, patient heterogeneity, and treatment response",
             0.78,
         )
 
@@ -218,7 +218,7 @@ def recommend_metabolon_story(
     if "clinical biomarker" in combined_text or "biomarker" in combined_text:
         return _story_for(
             "Global Discovery Panel",
-            "discovering and prioritizing biomarkers tied to pathway biology and patient stratification",
+            "discovering and prioritizing biomarkers tied to biological mechanisms and patient stratification",
             0.86,
         )
 
@@ -243,12 +243,12 @@ def recommend_metabolon_story(
     if "translational" in persona_text or "clinical development" in persona_text:
         return _story_for(
             "Biopharma Services",
-            "interpreting disease biology, response biology, and translational confidence in patient samples",
+            "interpreting patient sample biology and treatment-associated metabolic changes",
             0.82,
         )
 
     return _story_for(
         "Global Discovery Panel",
-        "using broad metabolomics to understand pathway biology and generate actionable hypotheses",
+        "using broad metabolomics to understand biological mechanisms and generate actionable hypotheses",
         0.62,
     )
