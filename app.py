@@ -788,35 +788,25 @@ def generate_contact_narrative(
 
 
 def build_scientific_story(story: MetabolonStory) -> str:
-    """Build a V5 industry-reality paragraph around adoption and biological insight gaps."""
+    """Build a V5 industry-shift paragraph around uneven adoption and insight gaps."""
     offering = (story.recommended_offering or "Global Discovery Panel").strip()
     problem = story.scientific_problem or "extracting biological insight from available samples"
 
     if offering == "Biopharma Services":
-        return (
-            "Across US pharma, I am increasingly seeing metabolomics and multiomics move "
-            "from specialist projects into routine translational, biomarker, and PK/PD decision making. "
-            "Many organizations now have access to large amounts of molecular data. "
-            f"The challenge is increasingly how to turn those data into actionable biological insight in areas such as {problem}."
-        )
-    if offering == "Lipidomics":
-        return (
-            "Across US pharma, I am increasingly seeing metabolomics and multiomics move "
-            "from specialist projects into routine biomarker, translational, and patient-stratification workstreams. "
-            "Many organizations now have access to large amounts of molecular data. "
-            f"The challenge is increasingly how to turn those data into actionable biological insight in areas such as {problem}."
-        )
-    if offering == "Multiomics":
-        return (
-            "Across US pharma, I am increasingly seeing multiomics become part of routine mechanism, biomarker, and translational decision making. "
-            "Many organizations now have access to large amounts of molecular data. "
-            f"The challenge is increasingly how to turn those data into actionable biological insight in areas such as {problem}."
-        )
+        workflow_context = "biomarker, translational, and PK/PD workflows"
+    elif offering == "Lipidomics":
+        workflow_context = "biomarker, translational, and patient-stratification workflows"
+    elif offering == "Multiomics":
+        workflow_context = "mechanism, biomarker, and translational workflows"
+    else:
+        workflow_context = "biomarker, mechanism, translational, and patient-stratification workflows"
+
     return (
-        "Across US pharma, I am increasingly seeing metabolomics and multiomics move "
-        "from specialist projects into routine biomarker, mechanism, translational, and patient-stratification workstreams. "
-        "Many organizations now have access to large amounts of molecular data. "
-        f"The challenge is increasingly how to turn those data into actionable biological insight in areas such as {problem}."
+        "What has surprised me is not the growing interest in metabolomics and multiomics, "
+        "but how differently organizations approach them. "
+        f"Some teams are now using these data routinely in {workflow_context}, while others still rely on a narrower set of molecular readouts. "
+        "Many teams already have samples that could answer important biological questions. "
+        f"The bottleneck is often understanding what those samples are already trying to say, especially around {problem}, before the next program decision."
     )
 
 

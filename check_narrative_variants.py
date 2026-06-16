@@ -51,8 +51,10 @@ def main() -> None:
         raise AssertionError("Missing required no-LinkedIn fallback observation")
     if "Are we doing enough" in sample.email:
         raise AssertionError("Email should create FOMO without using the goal phrase literally")
-    if "routine biomarker, mechanism, translational, and patient-stratification workstreams" not in sample.email:
-        raise AssertionError("V5 narrative must frame industry adoption")
+    if "how differently organizations approach" not in sample.email:
+        raise AssertionError("V5 narrative must frame uneven industry adoption")
+    if "what those samples are already trying to say" not in sample.email:
+        raise AssertionError("V5 narrative must create constructive FOMO around existing samples")
     if "Would it be worth comparing notes?" not in sample.email:
         raise AssertionError("CTA should invite discussion rather than sell services")
     for phrase in FORBIDDEN_EMAIL_TEXT:
