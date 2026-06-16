@@ -64,6 +64,18 @@ def main() -> None:
         )
     if "Would it be worth comparing notes?" not in sample.email:
         raise AssertionError("CTA should invite discussion rather than sell services")
+    if "not all metabolomics platforms are equivalent" not in sample.email:
+        raise AssertionError(
+            "Email must challenge equivalence assumptions before the CTA"
+        )
+    if sample.email.index(
+        "not all metabolomics platforms are equivalent"
+    ) > sample.email.index("Would it be worth comparing notes?"):
+        raise AssertionError("Differentiation narrative must appear before the CTA")
+    if "analytical depth, standardization, reproducibility" not in sample.email:
+        raise AssertionError(
+            "Differentiation narrative must emphasize platform-quality factors"
+        )
     for phrase in FORBIDDEN_EMAIL_TEXT:
         if phrase in sample.email:
             raise AssertionError(f"Forbidden phrase found: {phrase!r}")
@@ -105,7 +117,10 @@ def main() -> None:
         raise AssertionError(
             "LinkedIn extraction must preserve companion diagnostics and biomarker assay signals"
         )
-    if "Your focus on clinical development caught my attention." in companion_diagnostics_email.email:
+    if (
+        "Your focus on clinical development caught my attention."
+        in companion_diagnostics_email.email
+    ):
         raise AssertionError(
             "LinkedIn extraction must not collapse specific diagnostics signals into clinical development"
         )
@@ -122,8 +137,7 @@ def main() -> None:
     )
     if (
         "Your work across biomarker assay development and companion diagnostics "
-        "caught my attention."
-        not in cdx_email.email
+        "caught my attention." not in cdx_email.email
     ):
         raise AssertionError(
             "CDx and biomarker-assay signals must receive a distinctive LinkedIn observation"
@@ -159,7 +173,9 @@ def main() -> None:
             "Email opener must reuse the full-text LinkedIn observation instead of recomputing from the preview"
         )
     if truncated_linkedin_rows.loc[0, "LinkedIn Observation"] != full_text_observation:
-        raise AssertionError("Exported LinkedIn Observation must match the email opener")
+        raise AssertionError(
+            "Exported LinkedIn Observation must match the email opener"
+        )
     if truncated_linkedin_rows.loc[0, "LinkedIn Hook"] != full_text_observation:
         raise AssertionError(
             "Diagnostic LinkedIn Hook must match the exported observation"

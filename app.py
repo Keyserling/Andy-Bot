@@ -842,6 +842,37 @@ def build_scientific_story(story: MetabolonStory) -> str:
     )
 
 
+def build_metabolon_differentiation(story: MetabolonStory, persona: str) -> str:
+    """Return a concise platform-maturity paragraph without selling metabolomics."""
+    offering = (story.recommended_offering or "").strip()
+    persona_text = (persona or "").lower()
+
+    if offering == "Multiomics" or "computational" in persona_text:
+        return (
+            "As these data become more central to multiomics interpretation, the question increasingly becomes how reliable, comparable, and decision-relevant the underlying measurements are. "
+            "Standardized workflows and cross-program learning matter because small differences in platform maturity can change which biological signals are trusted."
+        )
+    if offering == "Biopharma Services" or "clinical" in persona_text:
+        return (
+            "Many organizations now have access to metabolomics, but fewer have access to data generated through standardized workflows shaped by 25+ years of pharmaceutical R&D programs. "
+            "That matters when teams need findings to remain comparable across studies, time points, and development decisions."
+        )
+    if offering == "Lipidomics" or "immun" in persona_text:
+        return (
+            "The value increasingly depends on distinguishing true biology from analytical variability, especially when programs need to compare signals longitudinally. "
+            "Platform maturity, reproducibility, and translational experience can materially affect how confidently those signals are interpreted."
+        )
+    if "biomarker" in persona_text:
+        return (
+            "For biomarker work, the important distinction is often not whether data can be generated, but whether findings can be interpreted consistently across cohorts and programs. "
+            "Analytical depth, reproducibility, and thousands of prior studies can materially influence which candidate signals deserve follow-up."
+        )
+    return (
+        "One thing that has become increasingly clear is that not all metabolomics platforms are equivalent. "
+        "Differences in analytical depth, standardization, reproducibility, and translational experience can materially influence the biological conclusions teams draw from the same study."
+    )
+
+
 def display_company_brand(company: str) -> str:
     """Return a recipient-facing company brand instead of legal-entity wording."""
     company = company.strip()
@@ -1119,6 +1150,7 @@ def linkedin_signal_audit_columns(
         reason = f"Selected from observation source: {selection_source}."
     return (*signals, *scores, reason)
 
+
 def summarize_linkedin_top_signals(linkedin_text: str) -> str:
     """Return the top distinctive LinkedIn signals for debug/audit columns."""
     normalized_text = linkedin_text.lower()
@@ -1211,7 +1243,9 @@ def build_personal_observation(
         if role_change:
             return role_change, role_source, "Yes", role_confidence
         normalized_text = linkedin_text.lower()
-        distinctive_observation = build_distinctive_linkedin_observation(normalized_text)
+        distinctive_observation = build_distinctive_linkedin_observation(
+            normalized_text
+        )
         if distinctive_observation[2] == "Yes":
             return distinctive_observation
         therapy = find_linkedin_signal(normalized_text, THERAPEUTIC_SIGNALS)
@@ -1334,7 +1368,9 @@ def build_email(
     initial_personalization_source = (
         "LinkedIn" if linkedin_hook_used == "Yes" else "LinkedIn fallback"
     )
-    initial_selected_linkedin_signal = extract_selected_linkedin_signal(linkedin_hook_type)
+    initial_selected_linkedin_signal = extract_selected_linkedin_signal(
+        linkedin_hook_type
+    )
     initial_signal_audit = linkedin_signal_audit_columns(
         linkedin_observation_text, initial_selected_linkedin_signal, linkedin_hook_type
     )
@@ -1436,8 +1472,8 @@ def build_email(
         hook_used = linkedin_hook_used
         linkedin_confidence = "High"
     else:
-        observation, hook_type, hook_used, linkedin_confidence = build_personal_observation(
-            linkedin_observation_text, company_text
+        observation, hook_type, hook_used, linkedin_confidence = (
+            build_personal_observation(linkedin_observation_text, company_text)
         )
     personalization_source = "LinkedIn" if hook_used == "Yes" else "LinkedIn fallback"
     selected_linkedin_signal = extract_selected_linkedin_signal(hook_type)
@@ -1445,9 +1481,8 @@ def build_email(
         linkedin_observation_text, selected_linkedin_signal, hook_type
     )
     scientific_story = build_scientific_story(metabolon_story)
-    authority_statement = (
-        "At Metabolon, we have had a front-row seat to this shift through our work "
-        "across pharmaceutical programs over the last 25 years."
+    differentiation_statement = build_metabolon_differentiation(
+        metabolon_story, active_persona
     )
     subject = f"A question on {contact_narrative.rstrip('.').lower()}"
     email = (
@@ -1455,7 +1490,7 @@ def build_email(
         f"{observation}\n\n"
         "My name is Helmut von Keyserling, and I work with pharmaceutical R&D organizations at Metabolon.\n\n"
         f"{scientific_story}\n\n"
-        f"{authority_statement}\n\n"
+        f"{differentiation_statement}\n\n"
         f"I would be interested in how {company_text} currently thinks about this area. "
         "Would it be worth comparing notes?\n\n"
         f"{build_signature(signature_name)}"
