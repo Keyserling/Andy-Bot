@@ -28,6 +28,11 @@ TOKEN_CACHE_USERNAME = "outlook-drafts"
 TOKEN_CACHE_PATH = Path.home() / ".andy_bot" / "ms_graph_token_cache.json"
 
 
+def is_outlook_graph_configured() -> bool:
+    """Return whether Microsoft Graph draft creation has a client ID configured."""
+    return bool(os.getenv("MS_GRAPH_CLIENT_ID", "").strip())
+
+
 class OutlookGraphAuthRequired(RuntimeError):
     """Raised when the user must complete Microsoft device-code authentication."""
 
@@ -105,6 +110,27 @@ class OutlookGraphDraftProvider(DraftProvider):
             token_cache=self.cache,
         )
 
+    def has_cached_account(self) -> bool:
+        """Return whether an Outlook account is available in the token cache."""
+        return bool(self.app.get_accounts())
+
+    def begin_device_authentication(self) -> dict[str, str]:
+        """Start Microsoft device-code authentication for delegated Mail.ReadWrite."""
+        flow = self.app.initiate_device_flow(scopes=GRAPH_SCOPES)
+        if "user_code" not in flow:
+            raise RuntimeError("Could not start Microsoft Graph device authentication.")
+        return flow
+
+    def connect(self) -> bool:
+        """Return True when Outlook is connected, otherwise raise with a device-code flow."""
+        accounts = self.app.get_accounts()
+        if accounts:
+            result = self.app.acquire_token_silent(GRAPH_SCOPES, account=accounts[0])
+            if result and "access_token" in result:
+                self._save_cache()
+                return True
+        raise OutlookGraphAuthRequired(self.begin_device_authentication())
+
     def export(self, drafts: pd.DataFrame) -> bytes:
         created_count = self.create_drafts(drafts)
         return json.dumps({"created": created_count}).encode("utf-8")
@@ -147,12 +173,7 @@ class OutlookGraphDraftProvider(DraftProvider):
         if accounts:
             result = self.app.acquire_token_silent(GRAPH_SCOPES, account=accounts[0])
         if not result:
-            flow = self.app.initiate_device_flow(scopes=GRAPH_SCOPES)
-            if "user_code" not in flow:
-                raise RuntimeError(
-                    "Could not start Microsoft Graph device authentication."
-                )
-            raise OutlookGraphAuthRequired(flow)
+            raise OutlookGraphAuthRequired(self.begin_device_authentication())
         if "access_token" not in result:
             raise RuntimeError(
                 result.get(
