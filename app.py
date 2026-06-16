@@ -219,6 +219,9 @@ class ContactOutreach(NamedTuple):
     linkedin_hook_type: str
     linkedin_hook_used: str
     linkedin_content_preview: str
+    linkedin_content_present: str
+    linkedin_summary: str
+    personalization_source: str
 
 
 def find_column(dataframe: pd.DataFrame, candidates: tuple[str, ...]) -> str | None:
@@ -1069,6 +1072,25 @@ def build_personal_observation(
     )
 
 
+def summarize_linkedin_content(linkedin_text: str) -> str:
+    """Return a compact debug-only summary of LinkedIn content signals."""
+    compact_text = " ".join(linkedin_text.split())
+    if not compact_text:
+        return ""
+
+    normalized_text = compact_text.lower()
+    for _, signals, _ in PERSONAL_OBSERVATION_PATTERNS:
+        for signal in signals:
+            if pattern_matches(normalized_text, signal):
+                return f"Focus on {clean_signal(signal)}"
+    return compact_text[:200]
+
+
+def linkedin_content_present_flag(linkedin_text: str) -> str:
+    """Return the debug flag for whether LinkedIn content reached generation."""
+    return "TRUE" if linkedin_text.strip() else "FALSE"
+
+
 def build_recipient_relevance(
     contact_narrative: str, use_case: str, benefits: tuple[str, ...]
 ) -> str:
@@ -1175,6 +1197,11 @@ def build_email(
     )
     first_name = get_contact_first_name(name, source_first_name)
     company_text = display_company_brand(company)
+    linkedin_content_present = linkedin_content_present_flag(linkedin_content_preview)
+    linkedin_summary = summarize_linkedin_content(linkedin_content_preview)
+    initial_personalization_source = (
+        "LinkedIn" if linkedin_hook_used == "Yes" else "Fallback Persona"
+    )
     if integrity.status == "RED":
         return ContactOutreach(
             name,
@@ -1201,6 +1228,9 @@ def build_email(
             linkedin_hook_type,
             linkedin_hook_used,
             linkedin_content_preview,
+            linkedin_content_present,
+            linkedin_summary,
+            initial_personalization_source,
         )
     active_persona = map_persona(persona)
     if active_persona == "Operations / Low Priority":
@@ -1229,6 +1259,9 @@ def build_email(
             linkedin_hook_type,
             linkedin_hook_used,
             linkedin_content_preview,
+            linkedin_content_present,
+            linkedin_summary,
+            initial_personalization_source,
         )
 
     metabolon_story = recommend_metabolon_story(
@@ -1308,6 +1341,9 @@ def build_email(
                     hook_type,
                     hook_used,
                     linkedin_content_preview,
+                    linkedin_content_present,
+                    linkedin_summary,
+                    "LinkedIn" if hook_used == "Yes" else "Fallback Persona",
                 )
 
     raise ValueError(
@@ -1362,6 +1398,9 @@ def empty_output_table() -> pd.DataFrame:
             "LinkedIn Hook Type",
             "LinkedIn Hook Used",
             "LinkedIn Content Preview",
+            "LinkedIn Content Present",
+            "LinkedIn Summary",
+            "Personalization Source",
         ]
     )
 
@@ -1502,6 +1541,9 @@ def generate_outreach_table(
             "LinkedIn Hook Type",
             "LinkedIn Hook Used",
             "LinkedIn Content Preview",
+            "LinkedIn Content Present",
+            "LinkedIn Summary",
+            "Personalization Source",
         ],
     )
 
