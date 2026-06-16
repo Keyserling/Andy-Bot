@@ -93,6 +93,10 @@ def main() -> None:
         raise AssertionError(
             "LinkedIn Content preview must contain the first 200 characters"
         )
+    if linkedin_rows.loc[0, "LinkedIn Content Present"] != "TRUE":
+        raise AssertionError("LinkedIn debug content-present flag must be TRUE")
+    if not linkedin_rows.loc[0, "LinkedIn Summary"]:
+        raise AssertionError("LinkedIn debug summary must be populated")
 
     normal_rows = generate_outreach_table(
         pd.DataFrame(
@@ -110,6 +114,10 @@ def main() -> None:
         raise AssertionError("Rows without LinkedIn Content must still work")
     if normal_rows.loc[0, "LinkedIn Content Preview"] != "":
         raise AssertionError("Rows without LinkedIn Content must have an empty preview")
+    if normal_rows.loc[0, "LinkedIn Content Present"] != "FALSE":
+        raise AssertionError("LinkedIn debug content-present flag must be FALSE")
+    if normal_rows.loc[0, "Personalization Source"] != "Fallback Persona":
+        raise AssertionError("Rows without LinkedIn Content must show fallback source")
 
     if len(variant_ids) < 6:
         raise AssertionError(
@@ -277,6 +285,10 @@ def main() -> None:
         raise AssertionError(
             "LinkedIn content should become the primary personalization layer"
         )
+    if linkedin_email.linkedin_content_present != "TRUE":
+        raise AssertionError("LinkedIn debug flag should confirm content reached email")
+    if linkedin_email.personalization_source != "LinkedIn":
+        raise AssertionError("LinkedIn debug source should show LinkedIn")
     if "Your recent focus on PK/PD caught my attention." not in linkedin_email.email:
         raise AssertionError("LinkedIn-derived observation should lead the email")
     if "LinkedIn" in linkedin_email.email:
