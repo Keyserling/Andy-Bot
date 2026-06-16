@@ -39,6 +39,10 @@ def main() -> None:
         raise AssertionError("Engine V5 must use one deterministic variant id")
     if sample.email != build_email("Taylor Example", "ExampleCo", "Discovery").email:
         raise AssertionError("Identical inputs must generate identical email text")
+    if not sample.subject.startswith("Metabolon |"):
+        raise AssertionError(
+            "Generated subjects must use persona-specific Metabolon subject lines"
+        )
     if "+49 176 61356899" not in sample.email:
         raise AssertionError("Signature must include Helmut's phone number")
     if "Strategic Account Manager, Pharma International" not in sample.email:
@@ -68,15 +72,20 @@ def main() -> None:
         raise AssertionError(
             "Default scientific story must use a scientific problem block"
         )
-    if "Would it be worth comparing notes?" not in sample.email:
+    if (
+        "compare notes and share what we have learned across other programs"
+        not in sample.email
+    ):
         raise AssertionError("CTA should invite discussion rather than sell services")
+    if "currently thinks about this area" in sample.email:
+        raise AssertionError("Generic company-thinking CTA must be replaced")
     if "not all metabolomics platforms are equivalent" not in sample.email:
         raise AssertionError(
             "Email must challenge equivalence assumptions before the CTA"
         )
     if sample.email.index(
         "not all metabolomics platforms are equivalent"
-    ) > sample.email.index("Would it be worth comparing notes?"):
+    ) > sample.email.index("compare notes"):
         raise AssertionError("Differentiation narrative must appear before the CTA")
 
     persona_problem_cases = (
