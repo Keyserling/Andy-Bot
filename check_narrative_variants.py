@@ -133,6 +133,38 @@ def main() -> None:
             "Diagnostic and biomarker signals must outrank generic clinical development"
         )
 
+    full_text_observation = (
+        "Your work across biomarker assay development and companion diagnostics "
+        "caught my attention."
+    )
+    truncated_linkedin_rows = generate_outreach_table(
+        pd.DataFrame(
+            [
+                {
+                    "Name": "Full Text Example",
+                    "Company": "ExampleCo",
+                    "Email": "fulltext@example.com",
+                    "Title": "Clinical Development Leader",
+                    "LinkedIn Content": (
+                        "Clinical Development " * 20
+                        + " biomarker assay development and companion diagnostics"
+                    ),
+                }
+            ]
+        )
+    )
+    truncated_email = truncated_linkedin_rows.loc[0, "Email"]
+    if full_text_observation not in truncated_email:
+        raise AssertionError(
+            "Email opener must reuse the full-text LinkedIn observation instead of recomputing from the preview"
+        )
+    if truncated_linkedin_rows.loc[0, "LinkedIn Observation"] != full_text_observation:
+        raise AssertionError("Exported LinkedIn Observation must match the email opener")
+    if truncated_linkedin_rows.loc[0, "LinkedIn Hook"] != full_text_observation:
+        raise AssertionError(
+            "Diagnostic LinkedIn Hook must match the exported observation"
+        )
+
     formal_email = build_email("Dr. Morgan Smith", "ExampleCo", "Discovery")
     if not formal_email.email.startswith("Dear Dr. Smith,"):
         raise AssertionError("Formal titled contacts must receive a formal greeting")
