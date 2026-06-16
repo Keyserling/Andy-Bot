@@ -218,11 +218,15 @@ class ContactOutreach(NamedTuple):
     linkedin_hook_used: str
     linkedin_content_preview: str
     linkedin_content_present: str
+    linkedin_content_length: int
+    linkedin_top_signals: str
+    selected_linkedin_signal: str
     linkedin_summary: str
     linkedin_observation: str
     linkedin_observation_source: str
     linkedin_observation_confidence: str
     personalization_source: str
+    personalization_mode: str
 
 
 def find_column(dataframe: pd.DataFrame, candidates: tuple[str, ...]) -> str | None:
@@ -1016,6 +1020,19 @@ def find_distinctive_linkedin_signals(normalized_text: str) -> list[str]:
     return matches
 
 
+def summarize_linkedin_top_signals(linkedin_text: str) -> str:
+    """Return the top distinctive LinkedIn signals for debug/audit columns."""
+    normalized_text = linkedin_text.lower()
+    return " / ".join(find_distinctive_linkedin_signals(normalized_text)[:5])
+
+
+def extract_selected_linkedin_signal(observation_source: str) -> str:
+    """Return the signal selected by the observation builder for debug/audit columns."""
+    if ":" not in observation_source:
+        return observation_source
+    return observation_source.split(":", 1)[1].strip()
+
+
 def build_distinctive_linkedin_observation(
     normalized_text: str,
 ) -> tuple[str, str, str, str]:
@@ -1206,10 +1223,13 @@ def build_email(
     )
     company_text = display_company_brand(company)
     linkedin_content_present = linkedin_content_present_flag(linkedin_content_preview)
+    linkedin_content_length = len(linkedin_content_preview)
+    linkedin_top_signals = summarize_linkedin_top_signals(linkedin_content_preview)
     linkedin_summary = summarize_linkedin_content(linkedin_content_preview)
     initial_personalization_source = (
         "LinkedIn" if linkedin_hook_used == "Yes" else "LinkedIn fallback"
     )
+    initial_selected_linkedin_signal = extract_selected_linkedin_signal(linkedin_hook_type)
     if integrity.status == "RED":
         return ContactOutreach(
             name,
@@ -1237,10 +1257,14 @@ def build_email(
             linkedin_hook_used,
             linkedin_content_preview,
             linkedin_content_present,
+            linkedin_content_length,
+            linkedin_top_signals,
+            initial_selected_linkedin_signal,
             linkedin_summary,
             linkedin_hook,
             linkedin_hook_type,
             "High" if linkedin_hook_used == "Yes" else "Low",
+            initial_personalization_source,
             initial_personalization_source,
         )
     active_persona = map_persona(persona)
@@ -1271,10 +1295,14 @@ def build_email(
             linkedin_hook_used,
             linkedin_content_preview,
             linkedin_content_present,
+            linkedin_content_length,
+            linkedin_top_signals,
+            initial_selected_linkedin_signal,
             linkedin_summary,
             linkedin_hook,
             linkedin_hook_type,
             "High" if linkedin_hook_used == "Yes" else "Low",
+            initial_personalization_source,
             initial_personalization_source,
         )
 
@@ -1291,6 +1319,8 @@ def build_email(
     observation, hook_type, hook_used, linkedin_confidence = build_personal_observation(
         linkedin_content_preview, company_text
     )
+    personalization_source = "LinkedIn" if hook_used == "Yes" else "LinkedIn fallback"
+    selected_linkedin_signal = extract_selected_linkedin_signal(hook_type)
     scientific_story = build_scientific_story(metabolon_story)
     authority_statement = (
         "At Metabolon, we have had a front-row seat to this shift through our work "
@@ -1335,11 +1365,15 @@ def build_email(
         hook_used,
         linkedin_content_preview,
         linkedin_content_present,
+        linkedin_content_length,
+        linkedin_top_signals,
+        selected_linkedin_signal,
         linkedin_summary,
         observation,
         hook_type,
         linkedin_confidence,
-        "LinkedIn" if hook_used == "Yes" else "LinkedIn fallback",
+        personalization_source,
+        personalization_source,
     )
 
 
@@ -1391,11 +1425,15 @@ def empty_output_table() -> pd.DataFrame:
             "LinkedIn Hook Used",
             "LinkedIn Content Preview",
             "LinkedIn Content Present",
+            "LinkedIn Content Length",
+            "LinkedIn Top Signals",
+            "Selected LinkedIn Signal",
             "LinkedIn Summary",
             "LinkedIn Observation",
             "LinkedIn Observation Source",
             "LinkedIn Observation Confidence",
             "Personalization Source",
+            "Personalization Mode",
         ]
     )
 
@@ -1537,11 +1575,15 @@ def generate_outreach_table(
             "LinkedIn Hook Used",
             "LinkedIn Content Preview",
             "LinkedIn Content Present",
+            "LinkedIn Content Length",
+            "LinkedIn Top Signals",
+            "Selected LinkedIn Signal",
             "LinkedIn Summary",
             "LinkedIn Observation",
             "LinkedIn Observation Source",
             "LinkedIn Observation Confidence",
             "Personalization Source",
+            "Personalization Mode",
         ],
     )
 
