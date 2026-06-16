@@ -111,7 +111,7 @@ def main() -> None:
         )
 
     cdx_email = build_email(
-        "Christoph Kneip",
+        "Diagnostic Signal Example",
         "ExampleCo",
         "Translational / Clinical Development",
         linkedin_content_available="Yes",
@@ -163,6 +163,18 @@ def main() -> None:
     if truncated_linkedin_rows.loc[0, "LinkedIn Hook"] != full_text_observation:
         raise AssertionError(
             "Diagnostic LinkedIn Hook must match the exported observation"
+        )
+
+    if (
+        truncated_linkedin_rows.loc[0, "Selected LinkedIn Signal"]
+        != "biomarker assay development / companion diagnostics"
+    ):
+        raise AssertionError(
+            "Selected LinkedIn Signal must come from the full-text observation source"
+        )
+    if truncated_linkedin_rows.loc[0, "LinkedIn Signal #1"] != "companion diagnostics":
+        raise AssertionError(
+            "LinkedIn debug ranking must use full LinkedIn text, not the truncated preview"
         )
 
     formal_email = build_email("Dr. Morgan Smith", "ExampleCo", "Discovery")

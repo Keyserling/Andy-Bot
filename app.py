@@ -231,8 +231,8 @@ class ContactOutreach(NamedTuple):
     linkedin_signal_score_4: str
     linkedin_signal_score_5: str
     selected_signal: str
-    selected_linkedin_signal: str
     selection_reason: str
+    selected_linkedin_signal: str
     linkedin_summary: str
     linkedin_observation: str
     linkedin_observation_source: str
@@ -933,6 +933,7 @@ FUNCTION_SIGNALS = (
     "precision medicine",
     "multiomics",
     "multi-omics",
+    "bioinformatics",
     "clinical pharmacology",
     "biomarker strategy",
     "bioanalysis",
@@ -1033,6 +1034,7 @@ LINKEDIN_DISTINCTIVE_SIGNALS: tuple[tuple[str, tuple[str, ...]], ...] = (
         "precision medicine",
         ("personalized medicine", "precision medicine", "target engagement"),
     ),
+    ("bioinformatics", ("bioinformatics",)),
 )
 
 
@@ -1310,6 +1312,7 @@ def build_email(
     linkedin_hook: str = "",
     linkedin_hook_type: str = "",
     linkedin_hook_used: str = "No",
+    linkedin_source_text: str | None = None,
 ) -> ContactOutreach:
     """Build deterministic Outreach Engine V5 email copy."""
     integrity = integrity or ContactIntegrity(
@@ -1319,16 +1322,21 @@ def build_email(
         name, source_first_name
     )
     company_text = display_company_brand(company)
-    linkedin_content_present = linkedin_content_present_flag(linkedin_content_preview)
-    linkedin_content_length = len(linkedin_content_preview)
-    linkedin_top_signals = summarize_linkedin_top_signals(linkedin_content_preview)
-    linkedin_summary = summarize_linkedin_content(linkedin_content_preview)
+    linkedin_observation_text = (
+        linkedin_source_text
+        if linkedin_source_text is not None
+        else linkedin_content_preview
+    )
+    linkedin_content_present = linkedin_content_present_flag(linkedin_observation_text)
+    linkedin_content_length = len(linkedin_observation_text)
+    linkedin_top_signals = summarize_linkedin_top_signals(linkedin_observation_text)
+    linkedin_summary = summarize_linkedin_content(linkedin_observation_text)
     initial_personalization_source = (
         "LinkedIn" if linkedin_hook_used == "Yes" else "LinkedIn fallback"
     )
     initial_selected_linkedin_signal = extract_selected_linkedin_signal(linkedin_hook_type)
     initial_signal_audit = linkedin_signal_audit_columns(
-        linkedin_content_preview, initial_selected_linkedin_signal, linkedin_hook_type
+        linkedin_observation_text, initial_selected_linkedin_signal, linkedin_hook_type
     )
     if integrity.status == "RED":
         return ContactOutreach(
@@ -1361,8 +1369,8 @@ def build_email(
             linkedin_top_signals,
             *initial_signal_audit[:10],
             initial_selected_linkedin_signal,
-            initial_selected_linkedin_signal,
             initial_signal_audit[10],
+            initial_selected_linkedin_signal,
             linkedin_summary,
             linkedin_hook,
             linkedin_hook_type,
@@ -1402,8 +1410,8 @@ def build_email(
             linkedin_top_signals,
             *initial_signal_audit[:10],
             initial_selected_linkedin_signal,
-            initial_selected_linkedin_signal,
             initial_signal_audit[10],
+            initial_selected_linkedin_signal,
             linkedin_summary,
             linkedin_hook,
             linkedin_hook_type,
@@ -1429,12 +1437,12 @@ def build_email(
         linkedin_confidence = "High"
     else:
         observation, hook_type, hook_used, linkedin_confidence = build_personal_observation(
-            linkedin_content_preview, company_text
+            linkedin_observation_text, company_text
         )
     personalization_source = "LinkedIn" if hook_used == "Yes" else "LinkedIn fallback"
     selected_linkedin_signal = extract_selected_linkedin_signal(hook_type)
     signal_audit = linkedin_signal_audit_columns(
-        linkedin_content_preview, selected_linkedin_signal, hook_type
+        linkedin_observation_text, selected_linkedin_signal, hook_type
     )
     scientific_story = build_scientific_story(metabolon_story)
     authority_statement = (
@@ -1484,8 +1492,8 @@ def build_email(
         linkedin_top_signals,
         *signal_audit[:10],
         selected_linkedin_signal,
-        selected_linkedin_signal,
         signal_audit[10],
+        selected_linkedin_signal,
         linkedin_summary,
         observation,
         hook_type,
@@ -1646,6 +1654,7 @@ def generate_contact_outreach(
         linkedin_hook,
         linkedin_hook_type,
         linkedin_hook_used,
+        linkedin_content,
     )
 
 
