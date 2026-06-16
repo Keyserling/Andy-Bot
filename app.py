@@ -220,7 +220,19 @@ class ContactOutreach(NamedTuple):
     linkedin_content_present: str
     linkedin_content_length: int
     linkedin_top_signals: str
+    linkedin_signal_1: str
+    linkedin_signal_2: str
+    linkedin_signal_3: str
+    linkedin_signal_4: str
+    linkedin_signal_5: str
+    linkedin_signal_score_1: str
+    linkedin_signal_score_2: str
+    linkedin_signal_score_3: str
+    linkedin_signal_score_4: str
+    linkedin_signal_score_5: str
+    selected_signal: str
     selected_linkedin_signal: str
+    selection_reason: str
     linkedin_summary: str
     linkedin_observation: str
     linkedin_observation_source: str
@@ -1020,6 +1032,78 @@ def find_distinctive_linkedin_signals(normalized_text: str) -> list[str]:
     return matches
 
 
+def rank_linkedin_signals(linkedin_text: str) -> list[tuple[str, int, str]]:
+    """Return detected LinkedIn signals with temporary audit scores.
+
+    Scores mirror the current deterministic priority order rather than a fixed bug
+    fix: earlier configured distinctive signals receive higher scores, repeated alias
+    matches add a small boost, and generic function/theme signals are included below
+    distinctive matches so the export can explain the current selection path.
+    """
+    normalized_text = linkedin_text.lower()
+    ranked: list[tuple[str, int, str]] = []
+    seen: set[str] = set()
+    total = len(LINKEDIN_DISTINCTIVE_SIGNALS)
+    for index, (display_signal, aliases) in enumerate(LINKEDIN_DISTINCTIVE_SIGNALS):
+        matched_aliases = [
+            alias for alias in aliases if pattern_matches(normalized_text, alias)
+        ]
+        if matched_aliases:
+            score = (total - index) * 100 + min(len(matched_aliases), 5)
+            ranked.append(
+                (
+                    display_signal,
+                    score,
+                    "distinctive priority match: " + ", ".join(matched_aliases),
+                )
+            )
+            seen.add(display_signal.lower())
+
+    generic_signals = FUNCTION_SIGNALS + SCIENTIFIC_THEME_SIGNALS + THERAPEUTIC_SIGNALS
+    for index, signal in enumerate(generic_signals):
+        display_signal = clean_signal(signal)
+        if display_signal.lower() in seen:
+            continue
+        if pattern_matches(normalized_text, signal):
+            score = max(1, 100 - index)
+            ranked.append((display_signal, score, f"generic fallback match: {signal}"))
+            seen.add(display_signal.lower())
+
+    return sorted(ranked, key=lambda item: item[1], reverse=True)
+
+
+def linkedin_signal_audit_columns(
+    linkedin_text: str, selected_signal: str, selection_source: str
+) -> tuple[str, str, str, str, str, str, str, str, str, str, str]:
+    """Return temporary LinkedIn signal-ranking audit columns for export."""
+    ranked = rank_linkedin_signals(linkedin_text)[:5]
+    signals = [item[0] for item in ranked]
+    scores = [str(item[1]) for item in ranked]
+    signals.extend([""] * (5 - len(signals)))
+    scores.extend([""] * (5 - len(scores)))
+    if not selected_signal:
+        reason = "No LinkedIn signal selected; fallback observation used."
+    elif selection_source.startswith("distinctive LinkedIn signal:"):
+        reason = (
+            "Selected by distinctive LinkedIn observation branch from detected signals: "
+            f"{selection_source.split(':', 1)[1].strip()}."
+        )
+    elif selection_source.startswith("functional specialty:"):
+        reason = (
+            "Selected by generic functional-specialty fallback after no distinctive "
+            f"combination branch was used: {selected_signal}."
+        )
+    elif selection_source.startswith("therapeutic area + function:"):
+        reason = (
+            "Selected by therapeutic-area plus function fallback: "
+            f"{selection_source.split(':', 1)[1].strip()}."
+        )
+    elif selection_source.startswith("scientific theme:"):
+        reason = f"Selected by scientific-theme fallback: {selected_signal}."
+    else:
+        reason = f"Selected from observation source: {selection_source}."
+    return (*signals, *scores, reason)
+
 def summarize_linkedin_top_signals(linkedin_text: str) -> str:
     """Return the top distinctive LinkedIn signals for debug/audit columns."""
     normalized_text = linkedin_text.lower()
@@ -1230,6 +1314,9 @@ def build_email(
         "LinkedIn" if linkedin_hook_used == "Yes" else "LinkedIn fallback"
     )
     initial_selected_linkedin_signal = extract_selected_linkedin_signal(linkedin_hook_type)
+    initial_signal_audit = linkedin_signal_audit_columns(
+        linkedin_content_preview, initial_selected_linkedin_signal, linkedin_hook_type
+    )
     if integrity.status == "RED":
         return ContactOutreach(
             name,
@@ -1259,7 +1346,10 @@ def build_email(
             linkedin_content_present,
             linkedin_content_length,
             linkedin_top_signals,
+            *initial_signal_audit[:10],
             initial_selected_linkedin_signal,
+            initial_selected_linkedin_signal,
+            initial_signal_audit[10],
             linkedin_summary,
             linkedin_hook,
             linkedin_hook_type,
@@ -1297,7 +1387,10 @@ def build_email(
             linkedin_content_present,
             linkedin_content_length,
             linkedin_top_signals,
+            *initial_signal_audit[:10],
             initial_selected_linkedin_signal,
+            initial_selected_linkedin_signal,
+            initial_signal_audit[10],
             linkedin_summary,
             linkedin_hook,
             linkedin_hook_type,
@@ -1321,6 +1414,9 @@ def build_email(
     )
     personalization_source = "LinkedIn" if hook_used == "Yes" else "LinkedIn fallback"
     selected_linkedin_signal = extract_selected_linkedin_signal(hook_type)
+    signal_audit = linkedin_signal_audit_columns(
+        linkedin_content_preview, selected_linkedin_signal, hook_type
+    )
     scientific_story = build_scientific_story(metabolon_story)
     authority_statement = (
         "At Metabolon, we have had a front-row seat to this shift through our work "
@@ -1367,7 +1463,10 @@ def build_email(
         linkedin_content_present,
         linkedin_content_length,
         linkedin_top_signals,
+        *signal_audit[:10],
         selected_linkedin_signal,
+        selected_linkedin_signal,
+        signal_audit[10],
         linkedin_summary,
         observation,
         hook_type,
@@ -1427,6 +1526,18 @@ def empty_output_table() -> pd.DataFrame:
             "LinkedIn Content Present",
             "LinkedIn Content Length",
             "LinkedIn Top Signals",
+            "LinkedIn Signal #1",
+            "LinkedIn Signal #2",
+            "LinkedIn Signal #3",
+            "LinkedIn Signal #4",
+            "LinkedIn Signal #5",
+            "LinkedIn Signal Score #1",
+            "LinkedIn Signal Score #2",
+            "LinkedIn Signal Score #3",
+            "LinkedIn Signal Score #4",
+            "LinkedIn Signal Score #5",
+            "Selected Signal",
+            "Selection Reason",
             "Selected LinkedIn Signal",
             "LinkedIn Summary",
             "LinkedIn Observation",
@@ -1577,6 +1688,18 @@ def generate_outreach_table(
             "LinkedIn Content Present",
             "LinkedIn Content Length",
             "LinkedIn Top Signals",
+            "LinkedIn Signal #1",
+            "LinkedIn Signal #2",
+            "LinkedIn Signal #3",
+            "LinkedIn Signal #4",
+            "LinkedIn Signal #5",
+            "LinkedIn Signal Score #1",
+            "LinkedIn Signal Score #2",
+            "LinkedIn Signal Score #3",
+            "LinkedIn Signal Score #4",
+            "LinkedIn Signal Score #5",
+            "Selected Signal",
+            "Selection Reason",
             "Selected LinkedIn Signal",
             "LinkedIn Summary",
             "LinkedIn Observation",
