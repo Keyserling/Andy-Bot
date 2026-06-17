@@ -15,7 +15,7 @@ from app import (
     generate_outreach_table,
     validate_contact_integrity,
 )
-from draft_exports import EMLDraftProvider, SENDER_NOT_CONFIGURED_NOTE
+from draft_exports import EMLDraftProvider
 from metabolon_knowledge import recommend_metabolon_story
 
 FORBIDDEN_EMAIL_TEXT = (
@@ -49,8 +49,13 @@ def main() -> None:
         raise AssertionError("Signature must include Helmut's title")
     if "hvonkeyserling@metabolon.com" not in sample.email:
         raise AssertionError("Signature must include Helmut's email address")
-    if "\nHelmut\n\nStrategic Account Manager" not in sample.email:
-        raise AssertionError("First-name greetings must sign with Helmut")
+    standard_signature_start = (
+        "\nHelmut\n\nDr. Helmut von Keyserling\n" "Strategic Account Manager"
+    )
+    if standard_signature_start not in sample.email:
+        raise AssertionError(
+            "Emails must use the standardized full professional signature"
+        )
     if (
         "Given your role at ExampleCo, I thought this might be relevant."
         not in sample.email
@@ -254,9 +259,26 @@ def main() -> None:
     formal_email = build_email("Dr. Morgan Smith", "ExampleCo", "Discovery")
     if not formal_email.email.startswith("Dear Dr. Smith,"):
         raise AssertionError("Formal titled contacts must receive a formal greeting")
-    if "\nHelmut von Keyserling\n\nStrategic Account Manager" not in formal_email.email:
+    if standard_signature_start not in formal_email.email:
         raise AssertionError(
-            "Formal titled contacts must receive Helmut's full-name signature"
+            "Formal titled contacts must use the standardized full professional signature"
+        )
+
+    intro_email = build_email(
+        "Renata Example",
+        "Bayer",
+        "Discovery",
+        linkedin_source_text="oncology PK/PD strategy",
+        personal_intro_flag="New in role",
+    )
+    if (
+        "I hope you have settled well into your new role at Bayer.\n\n"
+        "Interesting to see your work at the intersection of oncology and PK/PD strategy."
+        not in intro_email.email
+    ):
+        raise AssertionError(
+            "Personal intro flags must add an opener before, not instead of, "
+            "the LinkedIn observation"
         )
 
     rows = generate_outreach_table(
@@ -368,11 +390,11 @@ def main() -> None:
     unset_zip = EMLDraftProvider(sender_email="").export(draft_rows)
     with ZipFile(BytesIO(unset_zip)) as archive:
         unset_message = message_from_bytes(archive.read("contact_001.eml"))
-    if (
-        SENDER_NOT_CONFIGURED_NOTE
-        not in unset_message.get_payload(decode=True).decode()
-    ):
-        raise AssertionError("EML must include sender selection note when unset")
+    removed_outlook_instruction = "Open as draft" + " and choose sender in Outlook."
+    if removed_outlook_instruction in unset_message.get_payload(decode=True).decode():
+        raise AssertionError(
+            "EML must not include the removed Outlook instruction text"
+        )
 
     graph_rows = pd.DataFrame(
         [

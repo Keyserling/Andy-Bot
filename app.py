@@ -519,10 +519,8 @@ def get_contact_first_name(name: str, source_first_name: str = "") -> str:
     return "Colleague"
 
 
-def build_salutation_and_signature_name(
-    name: str, source_first_name: str = ""
-) -> tuple[str, str]:
-    """Return the email greeting and signature name according to V5 formality rules."""
+def build_salutation_name(name: str, source_first_name: str = "") -> str:
+    """Return the email greeting name according to V5 formality rules."""
     compact_name = " ".join((name or "").split())
     title_match = re.match(
         r"^(?P<title>Dr\.?|Prof\.?|Professor)\s+(?P<rest>.+)$",
@@ -538,20 +536,44 @@ def build_salutation_and_signature_name(
             re.UNICODE,
         )
         if surname_parts:
-            return f"{title} {surname_parts[-1]}", "Helmut von Keyserling"
+            return f"{title} {surname_parts[-1]}"
 
-    return get_contact_first_name(name, source_first_name), "Helmut"
+    return get_contact_first_name(name, source_first_name)
 
 
-def build_signature(signature_name: str) -> str:
-    """Return the full V5 Metabolon signature block."""
+def build_signature() -> str:
+    """Return the standard full Metabolon signature block."""
     return (
         "Best regards,\n\n"
-        f"{signature_name}\n\n"
+        "Helmut\n\n"
+        "Dr. Helmut von Keyserling\n"
         "Strategic Account Manager, Pharma International\n"
         "Metabolon, Inc.\n\n"
         "hvonkeyserling@metabolon.com\n"
         "+49 176 61356899"
+    )
+
+
+PERSONAL_INTRO_OPENERS = {
+    "New in role": "I hope you have settled well into your new role at {company}.",
+    "Recently promoted": "Congratulations on your recent promotion.",
+    "Recently joined company": "I noticed you recently joined {company}.",
+    "Internal move": "I noticed your recent move into this position.",
+    "New leadership responsibility": "Congratulations on your new leadership responsibility.",
+    "Long company tenure": "I was interested to see your long-standing experience at {company}.",
+    "Joined from competitor": "I noticed you joined {company} from another organization in the field.",
+    "Congratulations on recent appointment": "Congratulations on your recent appointment.",
+}
+PERSONAL_INTRO_OPTIONS = ("None", *PERSONAL_INTRO_OPENERS.keys())
+
+
+def build_personal_intro(personal_intro_flag: str, company: str) -> str:
+    """Return the optional manual personal intro opener for a selected flag."""
+    template = PERSONAL_INTRO_OPENERS.get(personal_intro_flag.strip())
+    if not template:
+        return ""
+    return template.format(
+        company=display_company_brand(company) or "your organization"
     )
 
 
@@ -1450,14 +1472,13 @@ def build_email(
     linkedin_hook_type: str = "",
     linkedin_hook_used: str = "No",
     linkedin_source_text: str | None = None,
+    personal_intro_flag: str = "None",
 ) -> ContactOutreach:
     """Build deterministic Outreach Engine V5 email copy."""
     integrity = integrity or ContactIntegrity(
         "YELLOW", "Company cannot be confirmed.", company, ""
     )
-    salutation_name, signature_name = build_salutation_and_signature_name(
-        name, source_first_name
-    )
+    salutation_name = build_salutation_name(name, source_first_name)
     company_text = display_company_brand(company)
     linkedin_observation_text = (
         linkedin_source_text
@@ -1589,14 +1610,16 @@ def build_email(
     )
     subject = select_subject_line(active_persona, name, company_text, matched_keyword)
     cta = select_challenge_oriented_cta(active_persona)
+    optional_intro = build_personal_intro(personal_intro_flag, company_text)
+    opener = f"{optional_intro}\n\n{observation}" if optional_intro else observation
     email = (
         f"Dear {salutation_name},\n\n"
-        f"{observation}\n\n"
+        f"{opener}\n\n"
         "My name is Helmut von Keyserling, and I work with pharmaceutical R&D organizations at Metabolon.\n\n"
         f"{scientific_story}\n\n"
         f"{differentiation_statement}\n\n"
         f"{cta}\n\n"
-        f"{build_signature(signature_name)}"
+        f"{build_signature()}"
     )
     if used_emails is not None:
         used_emails.add(email)
@@ -1727,6 +1750,7 @@ def initialize_session_state() -> None:
         "outlook_graph_connected": False,
         "linkedin_text_by_contact": {},
         "selected_linkedin_contact": "",
+        "personal_intro_flags_by_contact": {},
     }
     for key, value in defaults.items():
         st.session_state.setdefault(key, value)
@@ -1743,6 +1767,7 @@ def generate_contact_outreach(
     contacts: pd.DataFrame,
     linkedin_text_by_contact: dict[str, str] | None = None,
     used_emails: set[str] | None = None,
+    personal_intro_flags_by_contact: dict[str, str] | None = None,
 ) -> ContactOutreach:
     """Generate outreach for a single contact without changing other rows."""
     name_column = find_name_column(contacts)
@@ -1765,6 +1790,8 @@ def generate_contact_outreach(
     linkedin_content = get_cell_value(contact, linkedin_content_column, "")
     contact_key = get_contact_key(index, to)
     linkedin_text_by_contact = linkedin_text_by_contact or {}
+    personal_intro_flags_by_contact = personal_intro_flags_by_contact or {}
+    personal_intro_flag = personal_intro_flags_by_contact.get(contact_key, "None")
     if linkedin_text_by_contact.get(contact_key, "").strip():
         linkedin_content = linkedin_text_by_contact[contact_key].strip()
     linkedin_content_available = "Yes" if linkedin_content else "No"
@@ -1793,17 +1820,21 @@ def generate_contact_outreach(
         linkedin_hook_type,
         linkedin_hook_used,
         linkedin_content,
+        personal_intro_flag,
     )
 
 
 def generate_outreach_table(
-    contacts: pd.DataFrame, linkedin_text_by_contact: dict[str, str] | None = None
+    contacts: pd.DataFrame,
+    linkedin_text_by_contact: dict[str, str] | None = None,
+    personal_intro_flags_by_contact: dict[str, str] | None = None,
 ) -> pd.DataFrame:
     """Generate one persona-based email row for every uploaded contact."""
     if not find_name_column(contacts):
         raise ValueError("Could not find any columns in the uploaded file.")
 
     linkedin_text_by_contact = linkedin_text_by_contact or {}
+    personal_intro_flags_by_contact = personal_intro_flags_by_contact or {}
     rows: list[ContactOutreach] = []
     used_emails: set[str] = set()
     progress = st.progress(
@@ -1815,7 +1846,12 @@ def generate_outreach_table(
     for position, (_, contact) in enumerate(contacts.iterrows(), start=1):
         rows.append(
             generate_contact_outreach(
-                contact, position - 1, contacts, linkedin_text_by_contact, used_emails
+                contact,
+                position - 1,
+                contacts,
+                linkedin_text_by_contact,
+                used_emails,
+                personal_intro_flags_by_contact,
             )
         )
         progress.progress(
@@ -1963,14 +1999,35 @@ def render_linkedin_personalization(contacts: pd.DataFrame) -> None:
         disabled=True,
     )
 
+    current_intro_flag = st.session_state.personal_intro_flags_by_contact.get(
+        selected_key, "None"
+    )
+    intro_index = (
+        PERSONAL_INTRO_OPTIONS.index(current_intro_flag)
+        if current_intro_flag in PERSONAL_INTRO_OPTIONS
+        else 0
+    )
+    personal_intro_flag = st.selectbox(
+        "Optional personal intro flag",
+        PERSONAL_INTRO_OPTIONS,
+        index=intro_index,
+        help=(
+            "Adds a short human opener before the LinkedIn observation. "
+            "Select None to keep the LinkedIn observation as the opener."
+        ),
+        key=f"personal_intro_flag_{selected_key}",
+    )
     text_value = st.text_area(
         "Paste LinkedIn profile text for this contact",
         value=st.session_state.linkedin_text_by_contact.get(selected_key, ""),
         key=f"linkedin_text_input_{selected_key}",
         height=180,
     )
-    if st.button("Save LinkedIn text and regenerate this email"):
+    if st.button("Save LinkedIn text and intro flag, then regenerate this email"):
         st.session_state.linkedin_text_by_contact[selected_key] = text_value.strip()
+        st.session_state.personal_intro_flags_by_contact[selected_key] = (
+            personal_intro_flag
+        )
         used_emails = set(
             st.session_state.generated_emails["Email"].dropna().astype(str)
         )
@@ -1981,6 +2038,7 @@ def render_linkedin_personalization(contacts: pd.DataFrame) -> None:
             contacts,
             st.session_state.linkedin_text_by_contact,
             used_emails,
+            st.session_state.personal_intro_flags_by_contact,
         )
         st.session_state.generated_emails.iloc[selected_index] = list(updated)
         st.session_state.outlook_draft_csv = b""
@@ -2047,7 +2105,9 @@ def main() -> None:
     if st.button("Generate emails", type="primary"):
         try:
             st.session_state.generated_emails = generate_outreach_table(
-                contacts, st.session_state.linkedin_text_by_contact
+                contacts,
+                st.session_state.linkedin_text_by_contact,
+                st.session_state.personal_intro_flags_by_contact,
             )
             st.session_state.outlook_draft_csv = b""
             st.session_state.outlook_draft_zip = b""

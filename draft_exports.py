@@ -19,7 +19,7 @@ import pandas as pd
 DRAFT_COLUMNS = ["To", "Subject", "Body"]
 DEFAULT_SENDER_NAME = "Helmut von Keyserling"
 DEFAULT_SENDER_EMAIL = "helmut.vonkeyserling@metabolon.com"
-SENDER_NOT_CONFIGURED_NOTE = "Open as draft and choose sender in Outlook."
+SENDER_NOT_CONFIGURED_NOTE = ""
 GRAPH_AUTHORITY = "https://login.microsoftonline.com/common"
 GRAPH_BASE_URL = "https://graph.microsoft.com/v1.0"
 GRAPH_SCOPES = ["Mail.ReadWrite"]
@@ -79,11 +79,7 @@ class EMLDraftProvider(DraftProvider):
                 message["Subject"] = str(draft.Subject)
                 body = str(draft.Body)
                 if self.sender_email:
-                    message["From"] = (
-                        f"{DEFAULT_SENDER_NAME} <{DEFAULT_SENDER_EMAIL}>"
-                    )
-                else:
-                    body = f"{SENDER_NOT_CONFIGURED_NOTE}\n\n{body}"
+                    message["From"] = f"{DEFAULT_SENDER_NAME} <{DEFAULT_SENDER_EMAIL}>"
                 message.set_content(body)
                 archive.writestr(f"contact_{position:03d}.eml", message.as_bytes())
         return zip_buffer.getvalue()
