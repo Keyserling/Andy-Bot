@@ -65,30 +65,34 @@ PERSONA_SUBJECT_LINES: dict[str, tuple[str, ...]] = {
 PERSONA_CTAS: dict[str, str] = {
     "Biomarkers / Bioanalysis": (
         "We see these questions come up repeatedly in biomarker and stratification programs. "
-        "If any similar challenges exist within your portfolio, I would be happy to "
-        "compare notes and share what we have learned across other programs."
+        "If these questions are relevant within your programs, I would be happy to share "
+        "examples of how Metabolon has supported similar biomarker, translational, and "
+        "development decisions across pharmaceutical R&D."
     ),
     "Clinical Pharmacology": (
         "We see these questions arise frequently in PK/PD and clinical pharmacology settings. "
-        "If similar challenges exist within your programs, I would be happy to compare notes "
-        "and share how other teams have approached them."
+        "If this is an area of active interest, I would be happy to share how other "
+        "pharmaceutical teams have used metabolomics and multiomics data to address "
+        "similar questions."
     ),
     "Oncology": (
         "We encounter these questions regularly in oncology programs focused on response, "
-        "resistance, and patient selection. If similar topics are relevant within your "
-        "portfolio, I would be happy to compare notes and share perspectives from other programs."
+        "resistance, and patient selection. If these questions are relevant within your "
+        "programs, I would be happy to share examples of how Metabolon has supported "
+        "similar biomarker, translational, and development decisions across pharmaceutical R&D."
     ),
     "Computational Biology": (
         "We increasingly see teams working through the challenge of translating complex "
-        "multiomics datasets into biologically actionable insights. If similar questions are "
-        "relevant to your work, I would be happy to compare notes and share what we have "
-        "learned across other programs."
+        "multiomics datasets into biologically actionable insights. If this is an area of "
+        "active interest, I would be happy to share how other pharmaceutical teams have "
+        "used metabolomics and multiomics data to address similar questions."
     ),
     "Translational / Clinical Development": (
         "We see these questions come up frequently in translational and clinical development "
-        "programs where biological signals need to inform development decisions. If similar "
-        "challenges are relevant within your portfolio, I would be happy to compare notes and "
-        "share what we have learned across other programs."
+        "programs where biological signals need to inform development decisions. If these "
+        "questions are relevant within your programs, I would be happy to share examples of "
+        "how Metabolon has supported similar biomarker, translational, and development "
+        "decisions across pharmaceutical R&D."
     ),
 }
 
@@ -119,8 +123,9 @@ def select_challenge_oriented_cta(persona: str) -> str:
     """Return a challenge-oriented CTA matched to the recipient persona."""
     return PERSONA_CTAS.get(
         persona,
-        "If similar questions are relevant within your programs, I would be happy to "
-        "compare notes and share what we have learned across other programs.",
+        "If these questions are relevant within your programs, I would be happy to share "
+        "examples of how Metabolon has supported similar biomarker, translational, and "
+        "development decisions across pharmaceutical R&D.",
     )
 
 
@@ -1181,8 +1186,22 @@ LINKEDIN_DISTINCTIVE_SIGNALS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     ("molecular diagnostics", ("molecular diagnostics",)),
     (
+        "anti-cancer therapeutics",
+        ("anti-cancer therapeutics", "anticancer therapeutics", "cancer therapeutics"),
+    ),
+    (
+        "oncology drug development",
+        ("oncology drug development", "oncology clinical development"),
+    ),
+    ("scientific leadership", ("scientific leadership",)),
+    (
         "oncology diagnostics",
-        ("oncology diagnostics", "oncology", "immuno-oncology", "cancer"),
+        (
+            "oncology diagnostics",
+            "diagnostic development",
+            "diagnostic strategy",
+            "molecular diagnostics",
+        ),
     ),
     ("regulatory strategy", ("regulatory strategy",)),
     ("multiomics", ("multiomics", "multi-omics")),
@@ -1194,12 +1213,32 @@ LINKEDIN_DISTINCTIVE_SIGNALS: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 
-def find_distinctive_linkedin_signals(normalized_text: str) -> list[str]:
-    """Return distinctive LinkedIn profile signals in configured priority order."""
-    matches: list[str] = []
+def extract_about_section_text(normalized_text: str) -> str:
+    """Return LinkedIn About-section text when the pasted profile labels it."""
+    match = re.search(
+        r"(?:^|\n)\s*about\s*:\s*(.*?)(?=\n\s*(?:title|experience|activity|education|licenses|skills|publications)\s*:|$)",
+        normalized_text,
+        re.S,
+    )
+    return match.group(1) if match else ""
+
+
+def append_distinctive_matches(normalized_text: str, matches: list[str]) -> None:
+    """Append configured distinctive signals found in text without duplicates."""
     for display_signal, aliases in LINKEDIN_DISTINCTIVE_SIGNALS:
+        if display_signal in matches:
+            continue
         if any(pattern_matches(normalized_text, alias) for alias in aliases):
             matches.append(display_signal)
+
+
+def find_distinctive_linkedin_signals(normalized_text: str) -> list[str]:
+    """Return distinctive LinkedIn profile signals, prioritizing About-section concepts."""
+    matches: list[str] = []
+    about_text = extract_about_section_text(normalized_text)
+    if about_text:
+        append_distinctive_matches(about_text, matches)
+    append_distinctive_matches(normalized_text, matches)
     return matches
 
 
@@ -1322,7 +1361,10 @@ def build_distinctive_linkedin_observation(
             "Your experience spanning oncology diagnostics and companion diagnostic "
             "strategy caught my attention."
         )
-    elif {"PK/PD", "oncology diagnostics"} <= signal_set:
+    elif "PK/PD" in signal_set and any(
+        pattern_matches(normalized_text, signal)
+        for signal in ("oncology", "immuno-oncology", "cancer")
+    ):
         observation_signals = ["oncology", "PK/PD strategy"]
         observation = (
             "Interesting to see your work at the intersection of oncology and "
