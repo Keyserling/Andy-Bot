@@ -78,10 +78,12 @@ def main() -> None:
             "Default scientific story must use a scientific problem block"
         )
     if (
-        "compare notes and share what we have learned across other programs"
+        "share examples of how Metabolon has supported similar biomarker, translational, and development decisions"
         not in sample.email
     ):
-        raise AssertionError("CTA should invite discussion rather than sell services")
+        raise AssertionError("CTA should communicate practical Metabolon experience")
+    if "compare notes" in sample.email:
+        raise AssertionError("CTA should offer value instead of a passive discussion")
     if "currently thinks about this area" in sample.email:
         raise AssertionError("Generic company-thinking CTA must be replaced")
     if "not all metabolomics platforms are equivalent" not in sample.email:
@@ -90,7 +92,7 @@ def main() -> None:
         )
     if sample.email.index(
         "not all metabolomics platforms are equivalent"
-    ) > sample.email.index("compare notes"):
+    ) > sample.email.index("share examples"):
         raise AssertionError("Differentiation narrative must appear before the CTA")
 
     persona_problem_cases = (
@@ -161,6 +163,39 @@ def main() -> None:
         raise AssertionError("LinkedIn source should be recorded when a signal is used")
     if linkedin_email.linkedin_observation_confidence != "High":
         raise AssertionError("LinkedIn observation confidence should be recorded")
+
+    about_weighted_email = build_email(
+        "About Weighted Example",
+        "Bayer",
+        "Oncology",
+        linkedin_content_available="Yes",
+        linkedin_content_preview=(
+            "Title: Oncology Diagnostics Director\n"
+            "About: Scientific leadership in cancer therapeutics, improving patient "
+            "outcomes, and oncology drug development."
+        ),
+    )
+    if "Your focus on oncology diagnostics caught my attention." in about_weighted_email.email:
+        raise AssertionError("Oncology diagnostics must not be the default oncology opener")
+    if not (
+        "anti-cancer therapeutics" in about_weighted_email.email
+        or "oncology drug development" in about_weighted_email.email
+    ):
+        raise AssertionError(
+            "About-section therapeutic and development concepts must influence the opener"
+        )
+
+    oncology_only_email = build_email(
+        "Oncology Only Example",
+        "Bayer",
+        "Oncology",
+        linkedin_content_available="Yes",
+        linkedin_content_preview="Oncology leader focused on cancer therapeutics and patient outcomes.",
+    )
+    if "oncology diagnostics" in oncology_only_email.email:
+        raise AssertionError(
+            "Oncology diagnostics must require a genuine diagnostics signal"
+        )
 
     companion_diagnostics_email = build_email(
         "Riley Example",
